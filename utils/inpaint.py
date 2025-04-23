@@ -1,41 +1,68 @@
-from PIL import Image
-import numpy as np
+# inpaint_utils.py
+from PIL import Image, ImageOps, ImageFilter
 import torch
 from diffusers import StableDiffusionInpaintPipeline
 
-def inpaint_image(image_path: str,
-                  mask_path: str,
-                  prompt: str,
-                  output_path: str = "inpainted_output.jpg"):
-    # load model once
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+def pad_and_create_mask_reflect(
+    image: Image.Image,
+    left: int, right: int,
+    top: int, bottom: int,
+    feather: int = 25
+) -> (Image.Image, Image.Image):
+    """
+    Mirror-pad `image` on each side, then build a mask that’s white
+    in the padded regions and black over the original, feathered by `feather` px.
+    """
+    W, H = image.size
+    new_W, new_H = W + left + right, H + top + bottom
+
+    padded = Image.new("RGB", (new_W, new_H))
+    padded.paste(image, (left, top))
+    padded.paste(image.crop((0,0,left,H)).transpose(Image.FLIP_LEFT_RIGHT), (0, top))
+    padded.paste(image.crop((W-right,0,W,H)).transpose(Image.FLIP_LEFT_RIGHT), (left+W, top))
+    padded.paste(padded.crop((0, top, new_W, top+top)).transpose(Image.FLIP_TOP_BOTTOM), (0,0))
+    padded.paste(padded.crop((0, top+H-bottom, new_W, top+H)).transpose(Image.FLIP_TOP_BOTTOM), (0, top+H))
+
+    mask = Image.new("L", (new_W, new_H), 255)
+    mask.paste(0, (left, top, left+W, top+H))
+
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=feather))
+    return padded, mask
+
+def inpaint_image(
+    image: Image.Image,
+    mask: Image.Image,
+    prompt: str,
+    guidance_scale: float = 10.0,
+    steps: int = 50,
+    device: str = None
+) -> Image.Image:
+    """
+    Runs SD inpainting on `image` using `mask` and returns the result.
+    """
+    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+
     pipe = StableDiffusionInpaintPipeline.from_pretrained(
         "stabilityai/stable-diffusion-2-inpainting",
         torch_dtype=torch.float16 if device=="cuda" else torch.float32
     ).to(device)
+    pipe.feature_extractor.do_resize = False
+    pipe.feature_extractor.size = None
     pipe.safety_checker = None
 
-    # load _without_ any resize
-    rgb_img  = Image.open(image_path).convert("RGB")
-    mask_img = Image.open(mask_path).convert("L")
+    w, h = image.size
+    w, h = w - w % 8, h - h % 8
+    img_crop = image.crop((0,0,w,h))
+    mask_crop = mask.crop((0,0,w,h))
 
-    # ensure dimensions are multiples of 8
-    w, h = rgb_img.size
-    w -= w % 8; h -= h % 8
-
-    # pass your own size into the pipeline
-    result = pipe(
+    out = pipe(
         prompt=prompt,
-        image=rgb_img,
-        mask_image=mask_img,
+        image=img_crop,
+        mask_image=mask_crop,
         height=h,
         width=w,
-        guidance_scale=7.5,
-        num_inference_steps=50,
+        guidance_scale=guidance_scale,
+        num_inference_steps=steps,
     ).images[0]
 
-    result.save(output_path)
-    print(f"✅ Saved to {output_path}")
-
-if __name__ == "__main__":
-    main()
+    return out

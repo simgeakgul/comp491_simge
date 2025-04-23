@@ -126,6 +126,7 @@ def main(args):
         pers_pad, mask_pad = pad_and_create_mask_reflect(
             pers_pil, *([64] * 4), feather=25
         )
+        mask_pad.paste(mask_pil, (64, 64))
 
         # (c) in-paint
         inp_dbg  = pers_pad.copy()

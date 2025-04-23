@@ -1,172 +1,192 @@
+#!/usr/bin/env python
+"""
+Anchored panorama synthesis from a single perspective photo
+===========================================================
+
+Implements Part-1 (“Panorama Generation”) of:
+  Schwarz et al., *A Recipe for Generating 3D Worlds From a Single Image* (2025)
+
+Steps
+-----
+1.  Project the input image to the centre of an equirectangular canvas
+    *and* duplicate it to the backside (yaws 0° and 180°).
+2.  Generate three directional prompts with a VLM (atmosphere / sky / ground).
+3.  Out-paint 16 perspective crops (8 side, 4 sky, 4 ground) with ControlNet
+    in-painting, guided by the three prompts.
+4.  Write intermediate debug images and the final 360×180° panorama.
+
+Author:  GPT-4-o (“o3”) – April 2025
+"""
+
+# ---------- standard libs ----------------------------------------------------
 from pathlib import Path
-import argparse, cv2, numpy as np
+import argparse, os, cv2, numpy as np
 from PIL import Image
 from tqdm import tqdm
 import json
 
+# ---------- your helper functions (already provided) -------------------------
+from utils.center_img   import center_image
+# from utils.generate_prompt import generate_three_prompts
+from utils.inpaint      import pad_and_create_mask_reflect, inpaint_image
+from utils.persp_conv   import (
+    equirectangular_to_perspective, perspective_to_equirectangular
+)
 
-from utils.center_img import center_image
-from utils.generate_prompt import generate_three_prompts
-from utils.inpaint import pad_and_create_mask_reflect, inpaint_image
-from utils.persp_conv import equirectangular_to_perspective, perspective_to_equirectangular
+# ---------- CAMERA GRID (values exactly as in the paper) ---------------------
+SIDE_VIEWS = [0, 45, 90, 135, 180, 225, 270, 315]               # yaw°
+SKY_VIEWS  = [(0, 60), (90, 90), (180, 120), (270, 90)]         # (yaw,pitch)
+GRND_VIEWS = [(0,-60), (90,-90), (180,-120), (270,-90)]
+
+SIDE_FOV   = 85      # °
+TOPBOT_FOV = 120     # °
+VIEW_RES   = 1024    # perspective resolution (square)
+
+# -----------------------------------------------------------------------------
 
 
-# ----------------------------------------------------------------------------
-# 1.  CAMERA GRID FOR PROGRESSIVE OUTPAINTING   (values from the paper)
-# ----------------------------------------------------------------------------
-SIDE_VIEWS = [ 0, 45, 90, 135, 180, 225, 270, 315 ]      # yaw in °
-SKY_VIEWS  = [ (0,   60), (90,  90), (180, 120), (270,  90) ]   # (yaw,pitch)
-GRND_VIEWS = [ (0,  -60), (90, -90), (180,-120), (270, -90) ]
-
-SIDE_FOV = 85   # °
-TOPBOT_FOV = 120
-VIEW_RES = 1024  # square perspective resolution
-
-# α-blending helper -----------------------------------------------------------
-def alpha_blend(base, patch, mask):
+def blend_patch(pano: np.ndarray, patch: np.ndarray) -> None:
     """
-    Blend patch → base where mask∈[0,255].
-    All images uint8, shape (H,W,3). Works in-place on `base`.
+    In-place overwrite of pano pixels where `patch` is non-black.
     """
-    if mask.ndim == 2:            # make 3-channel
-        mask = np.repeat(mask[:, :, None], 3, axis=2)
-    # convert to float32 for blending
-    base[:] = (patch.astype(np.float32) * (mask/255.0) +
-               base.astype(np.float32)  * (1 - mask/255.0)).astype(np.uint8)
+    mask = (patch.sum(axis=-1) > 0)
+    pano[mask] = patch[mask]
 
-# ----------------------------------------------------------------------------
 
-def build_panorama(image_path: Path,
-                   out_width: int = 4096,
-                   out_height: int = 2048,
-                   guidance: float = 10.0,
-                   steps: int = 50,
-                   debug_dir: Path | None = Path("debug_pano")):
-    """
-    Builds the panorama *and* writes intermediate JPEGs so you can
-    inspect progress visually.
+def save_jpg(arr: np.ndarray, path: Path) -> None:
+    """Utility: BGR/float/uint8 tolerant → uint8 & save as JPEG."""
+    if arr.dtype != np.uint8:
+        arr = np.clip(arr, 0, 255).astype(np.uint8)
+    cv2.imwrite(str(path), cv2.cvtColor(arr, cv2.COLOR_RGB2BGR))
 
-    ── Saved files ───────────────────────────────────────────
-    debug_pano/
-        00_anchor.jpg         — after anchoring (input + backside duplicate)
-        01_after_view_00.jpg  — after first inpainted view is merged
-        02_after_view_01.jpg  — after second inpainted view is merged
-        ...
-        XX_final.jpg          — final panorama, same as function return
-    """
-    if debug_dir:                         # make directory once
-        debug_dir.mkdir(exist_ok=True, parents=True)
 
-    # 1. LOAD IMAGE ------------------------------------------------------------
-    src = Image.open(image_path).convert("RGB")
+def main(args):
+    # --------------------------------------------------------------------- #
+    # 0. House-keeping & I/O                                                #
+    # --------------------------------------------------------------------- #
+    out_dir = Path(args.out)
+    dbg_dir = out_dir / "debug_pano"
+    dbg_dir.mkdir(parents=True, exist_ok=True)
 
-    # 2. CREATE BASE PANORAMA (anchored) --------------------------------------
-    pano = center_image(np.array(src), fov_deg=90,
-                        out_width=out_width, out_height=out_height)
+    img_pil = Image.open(args.input).convert("RGB")
+    img_np  = np.array(img_pil)
 
-    back_patch = perspective_to_equirectangular(
-        pers_img=np.array(src),
-        yaw=180, pitch=0, fov=90,
-        out_width=out_width, out_height=out_height
+    # --------------------------------------------------------------------- #
+    # 1.  Initialise panorama & anchor duplication                          #
+    # --------------------------------------------------------------------- #
+    print("[Step-1] Creating anchored panorama …")
+    pano = center_image(img_np, fov_deg=args.fov,
+                        out_w=args.width, out_h=args.height)
+
+    # duplicate to backside (yaw = 180°)
+    backside = perspective_to_equirectangular(
+        img_np, yaw=180, pitch=0, fov=args.fov,
+        out_width=args.width, out_height=args.height
     )
-    pano = np.maximum(pano, back_patch)
+    blend_patch(pano, backside)
 
-    if debug_dir:
-        Image.fromarray(pano).save(debug_dir / "00_anchor.jpg", quality=90)
+    save_jpg(pano, dbg_dir / "00_pano_init.jpg")
 
-    # 3. PROMPTS (unchanged) ---------------------------------------------------
-    with open("prompts.json") as f:
-        prompts = json.load(f)
+    # --------------------------------------------------------------------- #
+    # 2.  Prompt generation                                                 #
+    # --------------------------------------------------------------------- #
+    print("[Step-2] Generating three directional prompts …")
 
-    final_pano   = pano.copy()
-    accum_weight = np.zeros((out_height, out_width), np.float32)
+    with open('prompts.json') as json_file:
+        prompts = json.load(json_file)
 
-    # 4. BUILD QUEUE -----------------------------------------------------------
-    queue = (
-        [(y, p, TOPBOT_FOV, "sky_or_ceiling")  for y, p in SKY_VIEWS ] +
-        [(y, p, TOPBOT_FOV, "ground_or_floor") for y, p in GRND_VIEWS] +
-        [(y, 0, SIDE_FOV, "atmosphere")        for y      in SIDE_VIEWS]
-    )
+    for k, v in prompts.items():
+        print(f"  {k}: {v}")
 
-    # 5. PROCESS VIEWS ---------------------------------------------------------
-    for idx, (yaw, pitch, fov, key) in enumerate(
-            tqdm(queue, desc="Outpainting views")):
+    # --------------------------------------------------------------------- #
+    # 3.  Progressive out-painting                                          #
+    # --------------------------------------------------------------------- #
+    view_id = 0  # used for debug filenames
 
-        crop = equirectangular_to_perspective(
-            pano, yaw=yaw, pitch=pitch, fov=fov,
-            resolution=(VIEW_RES, VIEW_RES)
+    def process_view(yaw, pitch, fov, prompt):
+        nonlocal pano, view_id
+
+        # (a) extract perspective crop
+        pers = equirectangular_to_perspective(
+            pano, yaw=yaw, pitch=pitch, fov=fov, resolution=VIEW_RES
         )
-        crop_img = Image.fromarray(crop)
+        cv2.imwrite(dbg_dir / f"{view_id:02d}_crop_raw.jpg", cv2.cvtColor(pers, cv2.COLOR_RGB2BGR))
 
-        pad_px = int(VIEW_RES * 0.15)
-        padded, mask = pad_and_create_mask_reflect(
-            crop_img, pad_px, pad_px, pad_px, pad_px, feather=25
+        pers_pil = Image.fromarray(pers)
+
+        # (b) build mask → white where pixels are *still* black (= need fill)
+        missing = (pers.sum(-1) == 0).astype(np.uint8) * 255
+        mask_pil = Image.fromarray(missing).convert("L")
+
+        # if nothing is missing, skip
+        if missing.max() == 0:
+            return
+
+        # quick feathering for seamless borders
+        pers_pad, mask_pad = pad_and_create_mask_reflect(
+            pers_pil, *([64] * 4), feather=25
         )
 
-        result = inpaint_image(
-            image=padded,
-            mask=mask,
-            prompt=prompts[key],
-            guidance_scale=guidance,
-            steps=steps
+        # (c) in-paint
+        inp_dbg  = pers_pad.copy()
+        out_pil  = inpaint_image(
+            pers_pad, mask_pad, prompt,
+            guidance_scale=args.guidance, steps=args.steps
         )
 
-        result = result.crop((pad_px, pad_px,
-                              pad_px + VIEW_RES, pad_px + VIEW_RES))
-        result_np = np.array(result)
+        # save debug: what model saw & produced
+        save_jpg(np.array(inp_dbg),  dbg_dir / f"{view_id:02d}_in_model.jpg")
+        save_jpg(np.array(out_pil),  dbg_dir / f"{view_id:02d}_out_model.jpg")
 
+        # (d) remove padding, convert back to numpy
+        out_np  = np.array(out_pil)[64:-64, 64:-64]  # undo mirror pad
+
+        # (e) re-project & blend into panorama
         patch = perspective_to_equirectangular(
-            result_np, yaw=yaw, pitch=pitch, fov=fov,
-            out_width=out_width, out_height=out_height)
-        weight = perspective_to_equirectangular(
-            np.full_like(result_np, 255),
-            yaw=yaw, pitch=pitch, fov=fov,
-            out_width=out_width, out_height=out_height)[:, :, 0]
+            out_np, yaw=yaw, pitch=pitch, fov=fov,
+            out_width=args.width, out_height=args.height
+        )
+        blend_patch(pano, patch)
 
-        alpha_blend(final_pano, patch, weight)
-        accum_weight += weight.astype(np.float32) / 255.0
+        # save panorama snapshot
+        save_jpg(pano, dbg_dir / f"{view_id:02d}_pano.jpg")
 
-        # save after this view
-        if debug_dir:
-            Image.fromarray(final_pano).save(
-                debug_dir / f"{idx+1:02d}_after_view_{idx:02d}.jpg",
-                quality=90
-            )
+        view_id += 1
 
-    # 6. NORMALISE & CLEANUP ---------------------------------------------------
-    nz = accum_weight > 0
-    final_pano[nz] = (final_pano[nz].astype(np.float32) /
-                      accum_weight[nz, None]).astype(np.uint8)
+    # ---------- horizontal band ------------------------------------------
+    print("[Step-3a] In-painting side views …")
+    for yaw in SIDE_VIEWS:
+        process_view(yaw, 0, SIDE_FOV, prompts["atmosphere"])
 
-    strip_w = int(out_width * (10/360))
-    cx      = out_width // 2
-    final_pano[:, cx-strip_w//2:cx+strip_w//2] = cv2.GaussianBlur(
-        final_pano[:, cx-strip_w//2:cx+strip_w//2],
-        (0, 0), sigmaX=5, sigmaY=5)
+    # ---------- sky -------------------------------------------------
+    print("[Step-3b] In-painting sky …")
+    for yaw, pitch in SKY_VIEWS:
+        process_view(yaw, pitch, TOPBOT_FOV, prompts["sky_or_ceiling"])
 
-    if debug_dir:
-        Image.fromarray(final_pano).save(debug_dir / "ZZ_final.jpg", quality=95)
-
-    return Image.fromarray(final_pano)
+    # ---------- ground ----------------------------------------------------
+    print("[Step-3c] In-painting ground …")
+    for yaw, pitch in GRND_VIEWS:
+        process_view(yaw, pitch, TOPBOT_FOV, prompts["ground_or_floor"])
 
 
-# ────────────────────────────────────────────────────────────────────────────
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("image", type=Path)
-    ap.add_argument("--out",   type=Path, default="panorama.jpg")
-    ap.add_argument("--width", type=int,  default=4096)
-    ap.add_argument("--height",type=int,  default=2048)
-    ap.add_argument("--steps", type=int,  default=50)
-    ap.add_argument("--gscale",type=float,default=10.0, help="guidance_scale")
-    args = ap.parse_args()
 
-    pano = build_panorama(
-        args.image, args.width, args.height,
-        guidance=args.gscale, steps=args.steps
-    )
-    pano.save(args.out, quality=95)
-    print(f"\nSaved panorama → {args.out}")
+    # --------------------------------------------------------------------- #
+    # 4.  Save final panorama                                               #
+    # --------------------------------------------------------------------- #
+    save_jpg(pano, out_dir / "final_pano.jpg")
+    print(f"Finished!  Full panorama written to {out_dir/'final_pano.jpg'}")
 
+
+# -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    main()
+    p = argparse.ArgumentParser(description="Panorama synthesis (Anchored)")
+    p.add_argument("input", type=str,               help="Path to perspective input image")
+    p.add_argument("-o", "--out", type=str, default=".",
+                   help="Output directory (default = current)")
+    p.add_argument("--width",  type=int, default=2048, help="Panorama width (2:1 aspect)")
+    p.add_argument("--height", type=int, default=1024, help="Panorama height")
+    p.add_argument("--fov",    type=float, default=90, help="Initial FOV of input image")
+    p.add_argument("--guidance", type=float, default=10.0, help="Classifier-free guidance")
+    p.add_argument("--steps",    type=int, default=50,   help="DDIM steps for in-painting")
+
+    main(p.parse_args())

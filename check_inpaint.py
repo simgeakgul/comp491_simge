@@ -1,6 +1,6 @@
 # run_inpaint.py
 from PIL import Image
-from inpaint import pad_and_create_mask_reflect, inpaint_image
+from utils.inpaint import pad_and_create_mask_reflect, inpaint_image
 
 def main():
     orig = Image.open("input.jpg").convert("RGB")

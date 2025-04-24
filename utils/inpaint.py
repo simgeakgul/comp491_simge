@@ -2,12 +2,15 @@
 from PIL import Image, ImageOps, ImageFilter
 import torch
 from diffusers import StableDiffusionInpaintPipeline
+import numpy as np
+import cv2
+
 
 def pad_and_create_mask_reflect(
     image: Image.Image,
     left: int, right: int,
     top: int, bottom: int,
-    feather: int = 25
+    feather: int = 30
 ) -> (Image.Image, Image.Image):
     """
     Mirror-pad `image` on each side, then build a mask that’s white
@@ -28,6 +31,26 @@ def pad_and_create_mask_reflect(
 
     mask = mask.filter(ImageFilter.GaussianBlur(radius=feather))
     return padded, mask
+
+def load_image_and_mask_from_black(
+    path: str,
+    threshold: int = 10,
+    dilate_px: int = 32,      # NEW  ➜ overlap zone
+    feather: int = 64         # bigger feather
+):
+    image = Image.open(path).convert("RGB")
+    arr   = np.array(image)
+
+    black = np.all(arr <= threshold, axis=2).astype(np.uint8)
+
+    # 1. Grow the mask *into* the picture ← overlap
+    kernel  = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate_px, dilate_px))
+    grown   = cv2.dilate(black, kernel, iterations=1)
+
+    mask = Image.fromarray(grown * 255, mode="L")
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=feather))
+    return image, mask
+
 
 def inpaint_image(
     image: Image.Image,

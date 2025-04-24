@@ -6,79 +6,65 @@ def equirectangular_to_perspective(
     yaw: float,
     pitch: float,
     fov: float,
-    resolution: tuple[int, int] | int
+    width: int,
+    height: int
 ) -> np.ndarray:
     """
     Convert an equirectangular panorama to a perspective view.
 
     Parameters
     ----------
-    equi_img  : (H, W, 3/4) uint8/float32 BGR or RGB array.
-    yaw       : Yaw (heading) in degrees. +yaw rotates camera to the right.
-    pitch     : Pitch in degrees. +pitch looks up, −pitch looks down.
-    fov       : Horizontal field‑of‑view in degrees.
-    resolution: Either (width, height) or a single int for square output.
+    equi_img : (H, W, C) uint8/float32 panorama (BGR or RGB)
+    yaw      : heading in degrees (+ = turn right)
+    pitch    : pitch in degrees (+ = look up)
+    fov      : horizontal FOV in degrees
+    width    : output image width in pixels
+    height   : output image height in pixels
 
     Returns
     -------
-    pers      : Perspective image (height, width, channels) same dtype as input.
+    pers     : (height, width, C) same dtype as input
     """
-    # ---------------------------- parameters ----------------------------
-    if isinstance(resolution, int):
-        W = H = resolution
-    else:
-        W, H = resolution
     equi_h, equi_w = equi_img.shape[:2]
 
-    # convert to radians
+    # to radians
     yaw   = np.deg2rad(yaw)
     pitch = np.deg2rad(pitch)
     fov   = np.deg2rad(fov)
 
-    # vertical fov from aspect ratio
-    fov_v = 2 * np.arctan(np.tan(fov/2) * (H / W))
+    # compute vertical FOV from aspect ratio
+    fov_v = 2 * np.arctan(np.tan(fov/2) * (height / width))
 
-    # ---------------------------- pixel grid ----------------------------
-    x = np.linspace(-np.tan(fov/2),  np.tan(fov/2),  W, dtype=np.float32)
-    y = np.linspace( np.tan(fov_v/2),-np.tan(fov_v/2), H, dtype=np.float32)
-    xs, ys = np.meshgrid(x, y)                     # shape (H, W)
-
-    # camera‑space directions (before rotation)
-    zs = np.ones_like(xs)
-    dirs = np.stack([xs, ys, zs], axis=-1)         # (H, W, 3)
+    # pixel grid in camera space
+    x = np.linspace(-np.tan(fov/2),  np.tan(fov/2),  width,  dtype=np.float32)
+    y = np.linspace( np.tan(fov_v/2), -np.tan(fov_v/2), height, dtype=np.float32)
+    xs, ys = np.meshgrid(x, y)            # (H, W)
+    dirs = np.stack([xs, ys, np.ones_like(xs)], axis=-1)
     dirs /= np.linalg.norm(dirs, axis=-1, keepdims=True)
 
-    # ---------------------------- rotate by yaw & pitch -----------------
-    # Rotation around y (yaw), then x (pitch)
+    # rotate by yaw (Y) then pitch (X)
     cy, sy = np.cos(yaw),   np.sin(yaw)
     cp, sp = np.cos(pitch), np.sin(pitch)
+    R_yaw   = np.array([[ cy, 0., sy],[0.,1.,0.],[-sy,0.,cy]], dtype=np.float32)
+    R_pitch = np.array([[1.,0.,0.],[0.,cp,-sp],[0.,sp,cp]], dtype=np.float32)
+    dirs = dirs @ (R_pitch @ R_yaw).T     # (H, W, 3)
 
-    R_yaw   = np.array([[ cy, 0., sy],
-                        [0., 1., 0.],
-                        [-sy, 0., cy]], dtype=np.float32)
+    # to spherical
+    lon = np.arctan2(dirs[...,0], dirs[...,2])      # [-π,π]
+    lat = np.arcsin(np.clip(dirs[...,1], -1., 1.))  # [-π/2,π/2]
 
-    R_pitch = np.array([[1., 0.,  0.],
-                        [0., cp, -sp],
-                        [0., sp,  cp]], dtype=np.float32)
+    # map to equirectangular coords
+    u = (lon + np.pi) / (2*np.pi) * equi_w
+    v = (np.pi/2 - lat)   / np.pi      * equi_h
 
-    R = R_pitch @ R_yaw
-    dirs = dirs @ R.T                                     # (H, W, 3)
-
-    # ---------------------------- dirs → spherical ----------------------
-    lon = np.arctan2(dirs[..., 0], dirs[..., 2])          # [-π, π]
-    lat = np.arcsin(np.clip(dirs[..., 1], -1., 1.))       # [-π/2, π/2]
-
-    # map to pixel coords in equirectangular
-    u = (lon + np.pi) / (2 * np.pi) * equi_w             # [0, W)
-    v = (np.pi/2 - lat) / np.pi * equi_h                  # [0, H)
-
-    # ---------------------------- remap ----------------------------
-    map_x = u.astype(np.float32)
-    map_y = v.astype(np.float32)
-    pers  = cv2.remap(equi_img, map_x, map_y,
-                      interpolation=cv2.INTER_LINEAR,
-                      borderMode=cv2.BORDER_WRAP)
-    return pers
+    # remap
+    return cv2.remap(
+        equi_img,
+        u.astype(np.float32),
+        v.astype(np.float32),
+        interpolation=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_WRAP
+    )
 
 
 def perspective_to_equirectangular(
@@ -86,153 +72,123 @@ def perspective_to_equirectangular(
     yaw: float,
     pitch: float,
     fov: float,
-    out_width: int,
-    out_height: int
+    width: int,
+    height: int
 ) -> np.ndarray:
     """
-    Warp a square or rectangular perspective image *back* onto an
-    equirectangular canvas.
+    Re-project a perspective image back onto an equirectangular canvas.
 
     Parameters
     ----------
-    pers_img   : (Hp, Wp, C) uint8 / float32 perspective (BGR or RGB).
-    yaw        : Heading of the perspective camera in **degrees** (+ = turn right).
-    pitch      : Pitch in **degrees** (+ = look up, − = look down).
-    fov        : Horizontal field‑of‑view of the perspective camera in **degrees**.
-    out_width  : Width  of the full equirectangular panorama (e.g. 4096).
-    out_height : Height of the full equirectangular panorama (e.g. 2048).
+    pers_img : (Hp, Wp, C) uint8/float32 perspective (BGR or RGB)
+    yaw      : heading in degrees (+ = turn right)
+    pitch    : pitch in degrees (+ = look up)
+    fov      : horizontal FOV in degrees
+    width    : output panorama width in pixels
+    height   : output panorama height in pixels
 
     Returns
     -------
-    pano_patch : (out_height, out_width, C) same dtype as input,  
-                 containing the perspective view re‑projected to equirectangular.
-                 Pixels outside the perspective’s FOV are left **black** (zeros).
+    pano_patch : (height, width, C) same dtype as input.
+                 Pixels outside the FOV remain black.
     """
-
     Hp, Wp = pers_img.shape[:2]
 
-    # ---------------------- pre‑compute constants ----------------------
-    # Convert to radians
+    # to radians
     yaw   = np.deg2rad(yaw)
     pitch = np.deg2rad(pitch)
     fov_h = np.deg2rad(fov)
-    # vertical FOV given aspect ratio
-    fov_v = 2 * np.arctan(np.tan(fov_h / 2) * (Hp / Wp))
-    tan_h = np.tan(fov_h / 2)
-    tan_v = np.tan(fov_v / 2)
+    fov_v = 2 * np.arctan(np.tan(fov_h/2) * (Hp / Wp))
+    tan_h = np.tan(fov_h/2)
+    tan_v = np.tan(fov_v/2)
 
-    # Rotation matrices (world -> cam)
+    # rotation (world→cam)
     cy, sy = np.cos(yaw),   np.sin(yaw)
     cp, sp = np.cos(pitch), np.sin(pitch)
+    R = (np.array([[1,0,0],[0,cp,-sp],[0,sp,cp]],dtype=np.float32) @
+         np.array([[ cy,0, sy],[0,1,0],[-sy,0,cy]],dtype=np.float32)).T
 
-    R_yaw   = np.array([[ cy, 0., sy],
-                        [0.,  1., 0.],
-                        [-sy, 0., cy]], dtype=np.float32)
-    R_pitch = np.array([[1., 0.,  0.],
-                        [0., cp, -sp],
-                        [0., sp,  cp]], dtype=np.float32)
-
-    R = (R_pitch @ R_yaw).T          # inverse: world→cam
-
-    # ---------------------- build pano pixel grid ----------------------
-    # Spherical angles for each pano pixel
-    j  = np.linspace(0, out_width-1,  out_width, dtype=np.float32)
-    i  = np.linspace(0, out_height-1, out_height, dtype=np.float32)
-    jj, ii = np.meshgrid(j, i)                               # (H, W)
-
-    lon = (jj / out_width)  * 2*np.pi - np.pi                # [-π, π]
-    lat =  np.pi/2 - (ii / out_height) * np.pi               # [-π/2, π/2]
-
-    # World‑space unit vectors
-    xw = np.cos(lat) * np.sin(lon)
+    # pano pixel grid → world dirs
+    j = np.linspace(0, width-1,  width, dtype=np.float32)
+    i = np.linspace(0, height-1, height, dtype=np.float32)
+    jj, ii = np.meshgrid(j,i)
+    lon =  (jj/width)  * 2*np.pi - np.pi
+    lat =  np.pi/2 - (ii/height) * np.pi
+    xw = np.cos(lat)*np.sin(lon)
     yw = np.sin(lat)
-    zw = np.cos(lat) * np.cos(lon)
-    dirs_world = np.stack([xw, yw, zw], axis=-1)            # (H, W, 3)
+    zw = np.cos(lat)*np.cos(lon)
+    dirs = np.stack([xw,yw,zw], axis=-1)  # (H, W, 3)
 
-    # Rotate into camera space
-    dirs_cam = dirs_world @ R.T                             # (H, W, 3)
+    # to camera space
+    dc = dirs @ R.T
+    xc, yc, zc = dc[...,0], dc[...,1], dc[...,2]
+    in_view = (zc>0) & (np.abs(xc/zc)<=tan_h) & (np.abs(yc/zc)<=tan_v)
 
-    # Perspective projection
-    xc = dirs_cam[..., 0]
-    yc = dirs_cam[..., 1]
-    zc = dirs_cam[..., 2]
+    # map to pers coords
+    u = (( xc/zc / tan_h + 1)*0.5)*(Wp-1)
+    v = ((-yc/zc / tan_v + 1)*0.5)*(Hp-1)
 
-    # points in front of camera
-    z_positive = zc > 0
-
-    # Normalised image‑plane coords
-    x_img =  xc / zc
-    y_img =  yc / zc
-
-    in_fov = (np.abs(x_img) <= tan_h) & (np.abs(y_img) <= tan_v) & z_positive
-
-    # Map to perspective pixel coordinates
-    u =  ( x_img / tan_h + 1) * 0.5 * (Wp-1)
-    v = (-y_img / tan_v + 1) * 0.5 * (Hp-1)
-
-    # ---------------------- build remap grids --------------------------
-    map_x = np.full_like(u, -1, dtype=np.float32)  # -1 ⇒ cv2 will leave pixel black
+    map_x = np.full_like(u, -1, dtype=np.float32)
     map_y = np.full_like(v, -1, dtype=np.float32)
-    map_x[in_fov] = u[in_fov].astype(np.float32)
-    map_y[in_fov] = v[in_fov].astype(np.float32)
+    map_x[in_view] = u[in_view]
+    map_y[in_view] = v[in_view]
 
-    # ---------------------- warp perspective → pano --------------------
-    pano_patch = cv2.remap(
-        pers_img,
-        map_x, map_y,
+    return cv2.remap(
+        pers_img, map_x, map_y,
         interpolation=cv2.INTER_LINEAR,
         borderMode=cv2.BORDER_CONSTANT,
         borderValue=0
     )
 
-    return pano_patch
 
 def equirectangular_to_cylindrical(
     equi_img: np.ndarray,
     yaw: float,
     pitch: float,
-    fov: float,                 # horizontal FOV of the desired view (deg)
-    resolution: Union[int, Tuple[int, int]] = 1024
+    fov: float,
+    width: int,
+    height: int
 ) -> np.ndarray:
     """
-    Extract a cylindrical (not rectilinear) view from an equirectangular panorama.
-    Horizontal lines stay horizontal, verticals stay vertical, and side–stretch
-    is greatly reduced, at the cost of curved diagonals.
-    """
-    # ---------- geometry ----------
-    if isinstance(resolution, int):
-        W = H = resolution
-    else:
-        W, H = resolution
+    Extract a cylindrical view from an equirectangular panorama.
 
-    fov = np.deg2rad(fov)
+    Parameters
+    ----------
+    equi_img : (H, W, C) panorama
+    yaw       : heading in degrees (+ = turn right)
+    pitch     : pitch in degrees (+ = look up)
+    fov       : horizontal FOV in degrees
+    width     : output width in pixels
+    height    : output height in pixels
+
+    Returns
+    -------
+    cyl       : (height, width, C) same dtype as input
+    """
+    # to radians
+    fov   = np.deg2rad(fov)
     yaw   = np.deg2rad(yaw)
     pitch = np.deg2rad(pitch)
 
-    f = (W / 2) / np.tan(fov / 2)          # focal length in pixels
+    f = (width / 2) / np.tan(fov / 2)
     equi_h, equi_w = equi_img.shape[:2]
 
-    # ---------- output pixel grid ----------
-    x = np.arange(W, dtype=np.float32) - W/2     # centred coords
-    y = np.arange(H, dtype=np.float32) - H/2
-    xs, ys = np.meshgrid(x, y)                   # shape (H,W)
+    x = np.arange(width,  dtype=np.float32) - width/2
+    y = np.arange(height, dtype=np.float32) - height/2
+    xs, ys = np.meshgrid(x, y)
 
-    # cylindrical → spherical
-    lon = xs / f                                 # rad
+    lon = xs / f
     lat = np.arctan(ys / f)
-
-    # apply camera yaw / pitch
     lon += yaw
     lat += pitch
 
-    # map spherical → equirectangular indices
     u = (lon + np.pi) / (2*np.pi) * equi_w
-    v = (np.pi/2 - lat) / np.pi * equi_h
+    v = -(np.pi/2 - lat)  / np.pi       * equi_h
 
-    map_x = u.astype(np.float32)
-    map_y = -v.astype(np.float32)
-
-    cyl = cv2.remap(equi_img, map_x, map_y,
-                    interpolation=cv2.INTER_LINEAR,
-                    borderMode=cv2.BORDER_WRAP)
-    return cyl
+    return cv2.remap(
+        equi_img,
+        u.astype(np.float32),
+        v.astype(np.float32),
+        interpolation=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_WRAP
+    )

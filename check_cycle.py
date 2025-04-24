@@ -1,10 +1,12 @@
 import cv2
+from PIL import Image
 from pathlib import Path
 from typing import Tuple, Union
 import numpy as np                
 from utils.persp_conv import (
     equirectangular_to_perspective,
-    equirectangular_to_cylindrical
+    equirectangular_to_cylindrical,
+    perspective_to_equirectangular
 )
 from utils.center_img import center_image
 from utils.inpaint import load_image_and_mask_from_black, inpaint_image
@@ -88,3 +90,46 @@ result.save("wide_out.jpg")
 print(">> Wide_out.jpg written.")
 
 
+
+
+
+def blend_patch_into_pano(
+    pano: np.ndarray,          # (H, W, 3) current panorama (uint8)
+    tile: np.ndarray,      # (Hp, Wp, 3) freshly in-painted perspective view
+    yaw: float, pitch: float, fov: float,
+) -> np.ndarray:
+    """
+    1. Re-project the perspective tile back onto equirectangular coords
+       using your `perspective_to_equirectangular`.
+    2. Build a soft alpha mask where the tile covers valid pixels.
+    3. Alpha-blend the tile into `pano` and return the new panorama.
+    """
+
+    if isinstance(tile, Image.Image):  # PIL ➜ np ➜ BGR
+        tile = cv2.cvtColor(np.asarray(tile), cv2.COLOR_RGB2BGR)
+
+    H, W = pano.shape[:2]
+
+    H, W = pano.shape[:2]
+
+    # 1. warp tile back onto a blank equirect canvas
+
+    patch = perspective_to_equirectangular(
+        tile, yaw=yaw, pitch=pitch, fov=fov, width=W, height=H
+    )
+
+    # 2. create a simple “valid-pixel” mask (anything non-zero)
+    mask = np.any(patch != 0, axis=-1)
+
+    # 3. hard overwrite
+    pano[mask] = patch[mask]
+    return pano
+
+pano0 = blend_patch_into_pano(
+    pano = pano,
+    tile = result,
+    yaw=45, pitch=0, fov=90,
+      
+)
+
+cv2.imwrite("pano0.jpg", pano0)

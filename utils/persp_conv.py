@@ -187,3 +187,52 @@ def perspective_to_equirectangular(
 
     return pano_patch
 
+def equirectangular_to_cylindrical(
+    equi_img: np.ndarray,
+    yaw: float,
+    pitch: float,
+    fov: float,                 # horizontal FOV of the desired view (deg)
+    resolution: Union[int, Tuple[int, int]] = 1024
+) -> np.ndarray:
+    """
+    Extract a cylindrical (not rectilinear) view from an equirectangular panorama.
+    Horizontal lines stay horizontal, verticals stay vertical, and side–stretch
+    is greatly reduced, at the cost of curved diagonals.
+    """
+    # ---------- geometry ----------
+    if isinstance(resolution, int):
+        W = H = resolution
+    else:
+        W, H = resolution
+
+    fov = np.deg2rad(fov)
+    yaw   = np.deg2rad(yaw)
+    pitch = np.deg2rad(pitch)
+
+    f = (W / 2) / np.tan(fov / 2)          # focal length in pixels
+    equi_h, equi_w = equi_img.shape[:2]
+
+    # ---------- output pixel grid ----------
+    x = np.arange(W, dtype=np.float32) - W/2     # centred coords
+    y = np.arange(H, dtype=np.float32) - H/2
+    xs, ys = np.meshgrid(x, y)                   # shape (H,W)
+
+    # cylindrical → spherical
+    lon = xs / f                                 # rad
+    lat = np.arctan(ys / f)
+
+    # apply camera yaw / pitch
+    lon += yaw
+    lat += pitch
+
+    # map spherical → equirectangular indices
+    u = (lon + np.pi) / (2*np.pi) * equi_w
+    v = (np.pi/2 - lat) / np.pi * equi_h
+
+    map_x = u.astype(np.float32)
+    map_y = -v.astype(np.float32)
+
+    cyl = cv2.remap(equi_img, map_x, map_y,
+                    interpolation=cv2.INTER_LINEAR,
+                    borderMode=cv2.BORDER_WRAP)
+    return cyl

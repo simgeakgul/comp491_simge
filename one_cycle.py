@@ -5,7 +5,6 @@ from typing import Tuple, Union
 import numpy as np                
 from utils.persp_conv import (
     equirectangular_to_perspective,
-    equirectangular_to_cylindrical,
     perspective_to_equirectangular
 )
 from utils.center_img import center_image, complete_to_1024
@@ -32,19 +31,21 @@ def one_cycle(
     # pick a “window” half the pano’s size by default
     crop_w, crop_h = W // 2, H // 2
 
-    # 1) cylindrical crop
-    cyl = equirectangular_to_cylindrical(
+    persp = equirectangular_to_perspective(
         pano,
         yaw=yaw,
         pitch=pitch,
         fov=fov,
-        width=crop_w,
-        height=crop_h
+        width=1024,
+        height=1024
     )
+
+    p_name = f"persp_{int(yaw)}.jpg"
+    cv2.imwrite(p_name, persp)
 
     # 2) get hard & soft masks from the black areas
     image, hard_mask, soft_mask = load_soft_hard_masks_from_black(
-        cyl,
+        persp,
         threshold=threshold,
         dilate_px=dilate_px,
         feather=feather
@@ -52,12 +53,15 @@ def one_cycle(
 
     # 3) inpaint that crop
     result = inpaint_image(
-        image_arr=cyl,
+        image_arr=persp,
         mask_arr=soft_mask,
         prompt=prompt,
         guidance_scale=guidance_scale,
         steps=steps
     )
+
+    r_name = f"painted_{int(yaw)}.jpg"
+    cv2.imwrite(r_name, result)
 
     # 4) blend it back into pano
     pano_filled = blend_patch_into_pano(
@@ -81,12 +85,12 @@ pano = center_image(resized, fov_deg=90, out_w=2048, out_h=1024)
 pano0 = one_cycle(pano, yaw=45)
 cv2.imwrite("pano0.jpg", pano0)
 
-# pano1 = one_cycle(pano0, yaw=315)
-# cv2.imwrite("pano1.jpg", pano1)
+pano1 = one_cycle(pano0, yaw=315)
+cv2.imwrite("pano1.jpg", pano1)
 
-# pano2 = one_cycle(pano1, yaw=90)
-# cv2.imwrite("pano2.jpg", pano2)
+pano2 = one_cycle(pano1, yaw=90)
+cv2.imwrite("pano2.jpg", pano2)
 
-# pano3 = one_cycle(pano2, yaw=270)
-# cv2.imwrite("pano3.jpg", pano3)
+pano3 = one_cycle(pano2, yaw=270)
+cv2.imwrite("pano3.jpg", pano3)
 

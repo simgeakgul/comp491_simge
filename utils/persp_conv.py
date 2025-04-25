@@ -9,22 +9,7 @@ def equirectangular_to_perspective(
     width: int,
     height: int
 ) -> np.ndarray:
-    """
-    Convert an equirectangular panorama to a perspective view.
 
-    Parameters
-    ----------
-    equi_img : (H, W, C) uint8/float32 panorama (BGR or RGB)
-    yaw      : heading in degrees (+ = turn right)
-    pitch    : pitch in degrees (+ = look up)
-    fov      : horizontal FOV in degrees
-    width    : output image width in pixels
-    height   : output image height in pixels
-
-    Returns
-    -------
-    pers     : (height, width, C) same dtype as input
-    """
     equi_h, equi_w = equi_img.shape[:2]
 
     # to radians
@@ -75,23 +60,7 @@ def perspective_to_equirectangular(
     width: int,
     height: int
 ) -> np.ndarray:
-    """
-    Re-project a perspective image back onto an equirectangular canvas.
 
-    Parameters
-    ----------
-    pers_img : (Hp, Wp, C) uint8/float32 perspective (BGR or RGB)
-    yaw      : heading in degrees (+ = turn right)
-    pitch    : pitch in degrees (+ = look up)
-    fov      : horizontal FOV in degrees
-    width    : output panorama width in pixels
-    height   : output panorama height in pixels
-
-    Returns
-    -------
-    pano_patch : (height, width, C) same dtype as input.
-                 Pixels outside the FOV remain black.
-    """
     Hp, Wp = pers_img.shape[:2]
 
     # to radians
@@ -140,55 +109,3 @@ def perspective_to_equirectangular(
         borderValue=0
     )
 
-
-def equirectangular_to_cylindrical(
-    equi_img: np.ndarray,
-    yaw: float,
-    pitch: float,
-    fov: float,
-    width: int,
-    height: int
-) -> np.ndarray:
-    """
-    Extract a cylindrical view from an equirectangular panorama.
-
-    Parameters
-    ----------
-    equi_img : (H, W, C) panorama
-    yaw       : heading in degrees (+ = turn right)
-    pitch     : pitch in degrees (+ = look up)
-    fov       : horizontal FOV in degrees
-    width     : output width in pixels
-    height    : output height in pixels
-
-    Returns
-    -------
-    cyl       : (height, width, C) same dtype as input
-    """
-    # to radians
-    fov   = np.deg2rad(fov)
-    yaw   = np.deg2rad(yaw)
-    pitch = np.deg2rad(pitch)
-
-    f = (width / 2) / np.tan(fov / 2)
-    equi_h, equi_w = equi_img.shape[:2]
-
-    x = np.arange(width,  dtype=np.float32) - width/2
-    y = np.arange(height, dtype=np.float32) - height/2
-    xs, ys = np.meshgrid(x, y)
-
-    lon = xs / f
-    lat = np.arctan(ys / f)
-    lon += yaw
-    lat += pitch
-
-    u = (lon + np.pi) / (2*np.pi) * equi_w
-    v = -(np.pi/2 - lat)  / np.pi       * equi_h
-
-    return cv2.remap(
-        equi_img,
-        u.astype(np.float32),
-        v.astype(np.float32),
-        interpolation=cv2.INTER_LINEAR,
-        borderMode=cv2.BORDER_WRAP
-    )

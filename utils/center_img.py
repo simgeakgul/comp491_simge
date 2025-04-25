@@ -70,7 +70,7 @@ def complete_to_1024(
     return image_arr
 
 
-def center_image(img, fov_deg=90, out_w=2048, out_h=1024):
+def center_image(img, fov_deg=90, out_w=8192, out_h=4096):
     # front view
     pano = perspective_to_equirectangular(
         pers_img   = img,

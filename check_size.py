@@ -30,10 +30,11 @@ def complete_to_1024(
         )
 
         cv2.imwrite("debug_sides_padded.png", padded)
-        cv2.imwrite("debug_sides_mask.png", mask)
         image_arr = inpaint_image(
             padded, mask, side_prompt, guidance_scale, steps
         )
+
+    cv2.imwrite("resized0.jpg", image_arr)
 
     # Stage 2: Expand sky (top) without reflect
     h, w = image_arr.shape[:2]
@@ -44,10 +45,10 @@ def complete_to_1024(
             image_arr, 0, 0, top, 0, feather, reflect=False
         )
         cv2.imwrite("debug_sky_padded.png", padded)
-        cv2.imwrite("debug_sky_mask.png", mask)
         image_arr = inpaint_image(
             padded, mask, sky_prompt, guidance_scale, steps
         )
+    cv2.imwrite("resized1.jpg", image_arr)
 
     # # Stage 3: Expand bottom (vertical) without reflect
     # h, w = image_arr.shape[:2]
@@ -81,4 +82,4 @@ resized = complete_to_1024(
     prompts_path = "prompts.json",
 ) 
 
-cv2.imwrite("resized.jpg", resized)
+

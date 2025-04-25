@@ -1,4 +1,5 @@
-import numpy as np    
+import numpy as np   
+from utils.persp_conv import perspective_to_equirectangular 
 
 def blend_patch_into_pano(
     pano: np.ndarray,

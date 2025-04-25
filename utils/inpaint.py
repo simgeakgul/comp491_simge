@@ -35,7 +35,7 @@ def pad_and_create_mask_reflect(
 def load_image_and_mask_from_black(
     path: str,
     threshold: int = 10,
-    dilate_px: int = 32,      # NEW  ➜ overlap zone
+    dilate_px: int = 32,     
     feather: int = 64         # bigger feather
 ):
     image = Image.open(path).convert("RGB")
@@ -50,6 +50,35 @@ def load_image_and_mask_from_black(
     mask = Image.fromarray(grown * 255, mode="L")
     mask = mask.filter(ImageFilter.GaussianBlur(radius=feather))
     return image, mask
+
+def load_soft_hard_masks_from_black(
+    path: str,
+    threshold: int = 10,
+    dilate_px: int = 32,
+    feather: int = 64
+):
+    """
+    Returns:
+      image      : PIL RGB
+      hard_mask  : binary PIL L mask (0 or 255), after dilation
+      soft_mask  : blurred PIL L mask, used for alpha-blend
+    """
+    image = Image.open(path).convert("RGB")
+    arr   = np.array(image)
+
+    black = np.all(arr <= threshold, axis=2).astype(np.uint8)
+
+    # 1) Grow
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate_px, dilate_px))
+    grown  = cv2.dilate(black, kernel, iterations=1)  # values 0 or 1
+
+    hard_mask = Image.fromarray((grown * 255).astype(np.uint8), mode="L")
+
+    # 2) Feather for alpha
+    soft_mask = hard_mask.filter(ImageFilter.GaussianBlur(radius=feather))
+
+    return image, hard_mask, soft_mask
+
 
 
 def inpaint_image(

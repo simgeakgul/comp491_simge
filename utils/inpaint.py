@@ -31,7 +31,11 @@ def pad_and_create_mask_reflect(
             padded[top+H:, :] = np.flipud(padded[top+H-bottom:top+H, :])
 
     mask = np.full((new_H, new_W), 255, dtype=np.uint8)
-    mask[top:top+H, left:left+W] = 0
+    margin = 16
+    mask[
+        top+margin : top+H-margin,
+        left+margin : left+W-margin
+    ] = 0
 
     k = feather * 2 + 1
     mask = cv2.GaussianBlur(mask, (k, k), sigmaX=feather)
@@ -43,7 +47,7 @@ def pad_and_create_mask_reflect(
 def load_image_and_mask_from_black(
     arr: np.ndarray,
     threshold: int = 10,
-    dilate_px: int = 32,
+    dilate_px: int = 64,
     feather: int = 64
 ) -> (np.ndarray, np.ndarray):
 
@@ -54,10 +58,8 @@ def load_image_and_mask_from_black(
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate_px, dilate_px))
     grown = cv2.dilate(black, kernel, iterations=1)
 
-    # convert to 0–255 mask
     mask = (grown * 255).astype(np.uint8)
 
-    # apply Gaussian blur (kernel size must be odd)
     ksize = (feather * 2 + 1, feather * 2 + 1)
     mask = cv2.GaussianBlur(mask, ksize, sigmaX=feather)
 
@@ -70,7 +72,6 @@ def load_soft_hard_masks_from_black(
     dilate_px: int = 32,
     feather: int = 64
 ) -> (np.ndarray, np.ndarray, np.ndarray):
-
 
     image = arr.copy()
     black = np.all(image <= threshold, axis=2).astype(np.uint8)
@@ -94,40 +95,35 @@ def inpaint_image(
     prompt: str,
     guidance_scale: float = 10.0,
     steps: int = 50,
-    device: str = None
+    device: str | None = None,
 ) -> np.ndarray:
-
-    # choose device
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
-    # load pipeline
     pipe = StableDiffusionInpaintPipeline.from_pretrained(
         "stabilityai/stable-diffusion-2-inpainting",
-        torch_dtype=torch.float16 if device == "cuda" else torch.float32
+        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
     ).to(device)
     pipe.feature_extractor.do_resize = False
     pipe.feature_extractor.size = None
     pipe.safety_checker = None
 
-    # convert numpy → PIL
-    image = Image.fromarray(image_arr).convert("RGB")
-    mask = Image.fromarray(mask_arr).convert("L")
+    image_rgb = cv2.cvtColor(image_arr, cv2.COLOR_BGR2RGB)
+    image = Image.fromarray(image_rgb)
+    mask  = Image.fromarray(mask_arr).convert("L")
 
-    # ensure dimensions are multiples of 8
+    # ensure dims are multiples of 8
     w, h = image.size
-    w8, h8 = w - (w % 8), h - (h % 8)
-    image = image.crop((0, 0, w8, h8))
-    mask  = mask.crop((0, 0, w8, h8))
+    image = image.crop((0, 0, w - w % 8, h - h % 8))
+    mask  = mask .crop((0, 0, w - w % 8, h - h % 8))
 
-    # run inpainting
     out_pil = pipe(
-        prompt=prompt,
-        image=image,
-        mask_image=mask,
-        height=h8,
-        width=w8,
-        guidance_scale=guidance_scale,
-        num_inference_steps=steps,
+        prompt            = prompt,
+        image             = image,
+        mask_image        = mask,
+        height            = image.size[1],
+        width             = image.size[0],
+        guidance_scale    = guidance_scale,
+        num_inference_steps = steps,
     ).images[0]
 
-    return np.array(out_pil)
+    return cv2.cvtColor(np.array(out_pil), cv2.COLOR_RGB2BGR)

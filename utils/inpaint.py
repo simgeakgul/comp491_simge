@@ -52,69 +52,70 @@ def load_image_and_mask_from_black(
     return image, mask
 
 def load_soft_hard_masks_from_black(
-    path: str,
+    arr: np.ndarray,
     threshold: int = 10,
     dilate_px: int = 32,
     feather: int = 64
-):
-    """
-    Returns:
-      image      : PIL RGB
-      hard_mask  : binary PIL L mask (0 or 255), after dilation
-      soft_mask  : blurred PIL L mask, used for alpha-blend
-    """
-    image = Image.open(path).convert("RGB")
-    arr   = np.array(image)
+) -> (np.ndarray, np.ndarray, np.ndarray):
 
-    black = np.all(arr <= threshold, axis=2).astype(np.uint8)
 
-    # 1) Grow
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate_px, dilate_px))
-    grown  = cv2.dilate(black, kernel, iterations=1)  # values 0 or 1
+    image = arr.copy()
+    black = np.all(image <= threshold, axis=2).astype(np.uint8)
 
-    hard_mask = Image.fromarray((grown * 255).astype(np.uint8), mode="L")
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (dilate_px, dilate_px)
+    )
+    grown = cv2.dilate(black, kernel, iterations=1)
 
-    # 2) Feather for alpha
-    soft_mask = hard_mask.filter(ImageFilter.GaussianBlur(radius=feather))
+    hard_mask = (grown * 255).astype(np.uint8)
+
+    ksize = (feather * 2 + 1, feather * 2 + 1)
+    soft_mask = cv2.GaussianBlur(hard_mask, ksize, sigmaX=feather)
 
     return image, hard_mask, soft_mask
 
 
 
 def inpaint_image(
-    image: Image.Image,
-    mask: Image.Image,
+    image_arr: np.ndarray,
+    mask_arr: np.ndarray,
     prompt: str,
     guidance_scale: float = 10.0,
     steps: int = 50,
     device: str = None
-) -> Image.Image:
-    """
-    Runs SD inpainting on `image` using `mask` and returns the result.
-    """
+) -> np.ndarray:
+
+    # choose device
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
+    # load pipeline
     pipe = StableDiffusionInpaintPipeline.from_pretrained(
         "stabilityai/stable-diffusion-2-inpainting",
-        torch_dtype=torch.float16 if device=="cuda" else torch.float32
+        torch_dtype=torch.float16 if device == "cuda" else torch.float32
     ).to(device)
     pipe.feature_extractor.do_resize = False
     pipe.feature_extractor.size = None
     pipe.safety_checker = None
 
-    w, h = image.size
-    w, h = w - w % 8, h - h % 8
-    img_crop = image.crop((0,0,w,h))
-    mask_crop = mask.crop((0,0,w,h))
+    # convert numpy → PIL
+    image = Image.fromarray(image_arr).convert("RGB")
+    mask = Image.fromarray(mask_arr).convert("L")
 
-    out = pipe(
+    # ensure dimensions are multiples of 8
+    w, h = image.size
+    w8, h8 = w - (w % 8), h - (h % 8)
+    image = image.crop((0, 0, w8, h8))
+    mask  = mask.crop((0, 0, w8, h8))
+
+    # run inpainting
+    out_pil = pipe(
         prompt=prompt,
-        image=img_crop,
-        mask_image=mask_crop,
-        height=h,
-        width=w,
+        image=image,
+        mask_image=mask,
+        height=h8,
+        width=w8,
         guidance_scale=guidance_scale,
         num_inference_steps=steps,
     ).images[0]
 
-    return out
+    return np.array(out_pil)

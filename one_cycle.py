@@ -36,8 +36,8 @@ def one_cycle(
         yaw=yaw,
         pitch=pitch,
         fov=fov,
-        width=1024,
-        height=1024
+        width=512,
+        height=512
     )
 
     p_name = f"persp_{int(yaw)}.jpg"
@@ -80,7 +80,7 @@ def one_cycle(
 image = cv2.imread("input.jpg")
 
 resized = complete_to_1024(image_arr = image,  prompts_path = "prompts.json")
-pano = center_image(resized, fov_deg=90, out_w=2048, out_h=1024)
+pano = center_image(resized)
 
 pano0 = one_cycle(pano, yaw=45)
 cv2.imwrite("pano0.jpg", pano0)

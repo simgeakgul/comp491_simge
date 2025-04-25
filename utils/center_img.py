@@ -70,29 +70,60 @@ def complete_to_1024(
     return image_arr
 
 
-def center_image(img, fov_deg=90, out_w=8192, out_h=4096):
-    # front view
-    pano = perspective_to_equirectangular(
-        pers_img   = img,
-        yaw        = 0.0,
-        pitch      = 0.0,
-        fov        = fov_deg,
-        width  = out_w,
-        height = out_h
+def center_image(
+    img: np.ndarray,
+    out_w: int = 4096,
+    out_h: int = 2048,
+    slice_fov: float = 45.0
+) -> np.ndarray:
+    h, w = img.shape[:2]
+    cx, cy = w // 2, h // 2
+
+    # Split image into left, center, right patches
+    center_patch = img[cy-256:cy+256, cx-256:cx+256]
+    left_raw = img[cy-256:cy+256, 0:256]  # Only 256 width
+    left_patch = np.zeros((512, 512, 3), dtype=img.dtype)
+    left_patch[:, 256:] = left_raw  # Fill the right half
+
+    # RIGHT PATCH
+    right_raw = img[cy-256:cy+256, w-256:w]  # Only 256 width
+    right_patch = np.zeros((512, 512, 3), dtype=img.dtype)
+    right_patch[:, :256] = right_raw  # Fill the left half
+
+    cv2.imwrite("center.jpg", center_patch)
+    cv2.imwrite("left.jpg", left_patch)
+    cv2.imwrite("right.jpg", right_patch)
+
+    # Project each patch with specified yaw
+    center_proj = perspective_to_equirectangular(
+        pers_img=center_patch,
+        yaw=0.0,
+        pitch=0.0,
+        fov=slice_fov,
+        width=out_w,
+        height=out_h
+    )
+    left_proj = perspective_to_equirectangular(
+        pers_img=left_patch,
+        yaw=-45.0,  # Left side (yaw to the left)
+        pitch=0.0,
+        fov=slice_fov,
+        width=out_w,
+        height=out_h
+    )
+    right_proj = perspective_to_equirectangular(
+        pers_img=right_patch,
+        yaw=45.0,  # Right side (yaw to the right)
+        pitch=0.0,
+        fov=slice_fov,
+        width=out_w,
+        height=out_h
     )
 
-    # 180° yaw gives the “mirrored” halves at the left and right edges
-    wrap = perspective_to_equirectangular(
-        pers_img   = img,
-        yaw        = 180.0,      # look backwards
-        pitch      = 0.0,
-        fov        = fov_deg,
-        width  = out_w,
-        height = out_h
-    )
+    canvas = np.zeros((out_h, out_w, 3), dtype=img.dtype)
 
-    # copy any non-black pixel from the second pass into the panorama
-    mask = wrap.any(axis=-1)
-    pano[mask] = wrap[mask]
-    return pano
+    for proj in [left_proj, center_proj, right_proj]:
+        mask = (proj.sum(axis=-1) != 0)
+        canvas[mask] = proj[mask]
 
+    return canvas

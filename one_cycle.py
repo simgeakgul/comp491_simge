@@ -12,8 +12,6 @@ from utils.center_img import center_image
 from utils.inpaint import load_soft_hard_masks_from_black, inpaint_image
 from utils.blend_pano import blend_patch_into_pano
 
-
-
 def one_cycle(
     pano: np.ndarray,
     yaw: float,
@@ -79,5 +77,13 @@ image = cv2.imread("input.jpg")
 pano = center_image(image, fov_deg=90, out_w=2048, out_h=1024)
 pano0 = one_cycle(pano, yaw=45)
 cv2.imwrite("pano0.jpg", pano0)
+
 pano1 = one_cycle(pano0, yaw=315)
 cv2.imwrite("pano1.jpg", pano1)
+
+pano2 = one_cycle(pano1, yaw=90)
+cv2.imwrite("pano2.jpg", pano2)
+
+pano3 = one_cycle(pano2, yaw=270)
+cv2.imwrite("pano3.jpg", pano3)
+

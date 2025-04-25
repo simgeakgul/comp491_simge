@@ -1,4 +1,3 @@
-# inpaint_utils.py
 from PIL import Image, ImageOps, ImageFilter
 import torch
 from diffusers import StableDiffusionInpaintPipeline
@@ -7,49 +6,63 @@ import cv2
 
 
 def pad_and_create_mask_reflect(
-    image: Image.Image,
+    image: np.ndarray,
     left: int, right: int,
     top: int, bottom: int,
-    feather: int = 30
-) -> (Image.Image, Image.Image):
-    """
-    Mirror-pad `image` on each side, then build a mask that’s white
-    in the padded regions and black over the original, feathered by `feather` px.
-    """
-    W, H = image.size
-    new_W, new_H = W + left + right, H + top + bottom
+    feather: int = 30,
+    reflect: bool = True
+) -> (np.ndarray, np.ndarray):
+    
+    H, W = image.shape[:2]
+    new_H, new_W = H + top + bottom, W + left + right
 
-    padded = Image.new("RGB", (new_W, new_H))
-    padded.paste(image, (left, top))
-    padded.paste(image.crop((0,0,left,H)).transpose(Image.FLIP_LEFT_RIGHT), (0, top))
-    padded.paste(image.crop((W-right,0,W,H)).transpose(Image.FLIP_LEFT_RIGHT), (left+W, top))
-    padded.paste(padded.crop((0, top, new_W, top+top)).transpose(Image.FLIP_TOP_BOTTOM), (0,0))
-    padded.paste(padded.crop((0, top+H-bottom, new_W, top+H)).transpose(Image.FLIP_TOP_BOTTOM), (0, top+H))
+    # 1) create blank canvas and paste original
+    padded = np.zeros((new_H, new_W, 3), dtype=image.dtype)
+    padded[top:top+H, left:left+W] = image
 
-    mask = Image.new("L", (new_W, new_H), 255)
-    mask.paste(0, (left, top, left+W, top+H))
+    if reflect:
+        if left > 0:
+            padded[top:top+H, :left] = np.fliplr(image[:, :left])
+        if right > 0:
+            padded[top:top+H, left+W:] = np.fliplr(image[:, W-right:W])
+        if top > 0:
+            padded[:top, :] = np.flipud(padded[top:top+top, :])
+        if bottom > 0:
+            padded[top+H:, :] = np.flipud(padded[top+H-bottom:top+H, :])
 
-    mask = mask.filter(ImageFilter.GaussianBlur(radius=feather))
+    mask = np.full((new_H, new_W), 255, dtype=np.uint8)
+    mask[top:top+H, left:left+W] = 0
+
+    k = feather * 2 + 1
+    mask = cv2.GaussianBlur(mask, (k, k), sigmaX=feather)
+
+
     return padded, mask
 
+
 def load_image_and_mask_from_black(
-    path: str,
+    arr: np.ndarray,
     threshold: int = 10,
-    dilate_px: int = 32,     
-    feather: int = 64         # bigger feather
-):
-    image = Image.open(path).convert("RGB")
-    arr   = np.array(image)
+    dilate_px: int = 32,
+    feather: int = 64
+) -> (np.ndarray, np.ndarray):
 
-    black = np.all(arr <= threshold, axis=2).astype(np.uint8)
+    image = arr.copy()
 
-    # 1. Grow the mask *into* the picture ← overlap
-    kernel  = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate_px, dilate_px))
-    grown   = cv2.dilate(black, kernel, iterations=1)
+    black = np.all(image <= threshold, axis=2).astype(np.uint8)
 
-    mask = Image.fromarray(grown * 255, mode="L")
-    mask = mask.filter(ImageFilter.GaussianBlur(radius=feather))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate_px, dilate_px))
+    grown = cv2.dilate(black, kernel, iterations=1)
+
+    # convert to 0–255 mask
+    mask = (grown * 255).astype(np.uint8)
+
+    # apply Gaussian blur (kernel size must be odd)
+    ksize = (feather * 2 + 1, feather * 2 + 1)
+    mask = cv2.GaussianBlur(mask, ksize, sigmaX=feather)
+
     return image, mask
+
 
 def load_soft_hard_masks_from_black(
     arr: np.ndarray,
@@ -73,7 +86,6 @@ def load_soft_hard_masks_from_black(
     soft_mask = cv2.GaussianBlur(hard_mask, ksize, sigmaX=feather)
 
     return image, hard_mask, soft_mask
-
 
 
 def inpaint_image(

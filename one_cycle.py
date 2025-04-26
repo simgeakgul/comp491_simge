@@ -1,4 +1,5 @@
 import cv2
+import os
 from PIL import Image
 from pathlib import Path
 from typing import Tuple, Union
@@ -8,8 +9,14 @@ from utils.persp_conv import (
     perspective_to_equirectangular
 )
 from utils.center_img import center_image, complete_to_1024
-from utils.inpaint import load_soft_hard_masks_from_black, inpaint_image
+from utils.inpaint import load_mask_from_black, inpaint_image
 from utils.blend_pano import blend_patch_into_pano
+
+DEBUG_FOLDER = "debug_images"
+
+def save_image(filename, image):
+    full_path = os.path.join(DEBUG_FOLDER, filename)
+    cv2.imwrite(full_path, image)
 
 def one_cycle(
     pano: np.ndarray,
@@ -20,16 +27,10 @@ def one_cycle(
         "Continue the alpine scene: pine trees and ground, "
         "matching the original artist’s soft brush strokes, lighting and color palette"
     ),
-    threshold: int = 10,
-    dilate_px: int = 32,
-    feather: int = 64,
-    guidance_scale: float = 11.0,
+    dilate_px: int = 16,
+    guidance_scale: float = 8.0,
     steps: int = 50
 ) -> np.ndarray:
-
-    H, W = pano.shape[:2]
-    # pick a “window” half the pano’s size by default
-    crop_w, crop_h = W // 2, H // 2
 
     persp = equirectangular_to_perspective(
         pano,
@@ -37,31 +38,31 @@ def one_cycle(
         pitch=pitch,
         fov=fov,
         width=512,
-        height=512
+        height=256
     )
 
-    p_name = f"persp_{int(yaw)}.jpg"
-    cv2.imwrite(p_name, persp)
+    p_name = f"1_persp_{int(yaw)}.jpg"
+    save_image(p_name, persp)
 
     # 2) get hard & soft masks from the black areas
-    image, hard_mask, soft_mask = load_soft_hard_masks_from_black(
+    mask = load_mask_from_black(
         persp,
-        threshold=threshold,
         dilate_px=dilate_px,
-        feather=feather
     )
+
+    save_image("2_hard_mask.jpg", hard)
 
     # 3) inpaint that crop
     result = inpaint_image(
         image_arr=persp,
-        mask_arr=soft_mask,
+        mask_arr=mask,
         prompt=prompt,
         guidance_scale=guidance_scale,
         steps=steps
     )
 
-    r_name = f"painted_{int(yaw)}.jpg"
-    cv2.imwrite(r_name, result)
+    r_name = f"4_painted_{int(yaw)}.jpg"
+    save_image(r_name, result)
 
     # 4) blend it back into pano
     pano_filled = blend_patch_into_pano(
@@ -78,19 +79,21 @@ def one_cycle(
 
 
 image = cv2.imread("input.jpg")
+# resized = complete_to_1024(image_arr = image,  prompts_path = "prompts.json")
 
-resized = complete_to_1024(image_arr = image,  prompts_path = "prompts.json")
+resized = cv2.imread("resized.jpg")
 pano = center_image(resized)
+save_image("5_pano.jpg", pano)
 
 pano0 = one_cycle(pano, yaw=45)
-cv2.imwrite("pano0.jpg", pano0)
+save_image("6_pano0.jpg", pano0)
 
-pano1 = one_cycle(pano0, yaw=315)
-cv2.imwrite("pano1.jpg", pano1)
+# pano1 = one_cycle(pano0, yaw=315)
+# save_image("pano1.jpg", pano1)
 
-pano2 = one_cycle(pano1, yaw=90)
-cv2.imwrite("pano2.jpg", pano2)
+# pano2 = one_cycle(pano1, yaw=90)
+# save_image("pano2.jpg", pano2)
 
-pano3 = one_cycle(pano2, yaw=270)
-cv2.imwrite("pano3.jpg", pano3)
+# pano3 = one_cycle(pano2, yaw=270)
+# save_image("pano3.jpg", pano3)
 

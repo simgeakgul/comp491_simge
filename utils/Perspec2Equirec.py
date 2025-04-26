@@ -4,9 +4,14 @@ import cv2
 import numpy as np
 
 class Perspective:
-    def __init__(self, img_name , FOV, THETA, PHI ):
-        self._img = cv2.imread(img_name, cv2.IMREAD_COLOR)
-        [self._height, self._width, _] = self._img.shape
+    def __init__(self, img , FOV, THETA, PHI ):
+        
+        if img.ndim == 2:
+            img = np.repeat(img[:, :, None], 3, axis=2)
+        self._img = img
+        
+        self._height, self._width, _ = img.shape
+
         self.wFOV = FOV
         self.THETA = THETA
         self.PHI = PHI
@@ -55,11 +60,18 @@ class Perspective:
         mask = np.where((-self.w_len<xyz[:,:,1])&(xyz[:,:,1]<self.w_len)&(-self.h_len<xyz[:,:,2])
                     &(xyz[:,:,2]<self.h_len),1,0)
 
+        
         persp = cv2.remap(self._img, lon_map.astype(np.float32), lat_map.astype(np.float32), cv2.INTER_CUBIC, borderMode=cv2.BORDER_WRAP)
         
         mask = mask * inverse_mask
         mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
         persp = persp * mask
+
+        if persp.dtype != np.uint8:
+            persp = np.clip(persp, 0, 255).astype(np.uint8)
+
+        mask = (mask[:, :, 0] * 255).astype(np.uint8)
+
         
         
         return persp , mask

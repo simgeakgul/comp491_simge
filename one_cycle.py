@@ -35,7 +35,7 @@ def one_cycle(
         yaw=yaw,
         pitch=pitch,
         fov=fov,
-        width=2048,
+        width=1024,
         height=1024
     )
 
@@ -77,7 +77,7 @@ image = cv2.imread("input.jpg")
 # resized = complete_to_1024(image_arr = image,  prompts_path = "prompts.json")
 
 resized = cv2.imread("resized.jpg")
-pano = center_image(resized)
+pano = center_image(resized, fov_deg=90)
 
 
 
@@ -86,15 +86,16 @@ with open('prompts.json', 'r') as file:
 
 
 pitch_map = {
-    "atmosphere":      0.0,    # horizontal band
-    "sky_or_ceiling": 90.0,    # looking straight up
+    "atmosphere":       0.0,    # horizontal band
+    "sky_or_ceiling":   90.0,    # looking straight up
     "ground_or_floor": -90.0,  # looking straight down
 }
 
 # 3. Define all yaw angles per category  
-horizontal_yaws = [45, -45, 90, -90, 135, -135]
+horizontal_yaws = [0, 45, 90, 135, 180, 225, 270, 315]
 sky_yaws        = [0, 90, 180, 270]
 ground_yaws     = [0, 90, 180, 270]
+
 
 # 4. Choose FOV per category (optional tweak)
 fov_map = {
@@ -108,11 +109,11 @@ view_list = []
 for yaw in horizontal_yaws:
     view_list.append(("atmosphere", yaw))
 
-# for yaw in sky_yaws:
-#     view_list.append(("sky_or_ceiling", yaw))
+for yaw in sky_yaws:
+    view_list.append(("sky_or_ceiling", yaw))
 
-# for yaw in ground_yaws:
-#     view_list.append(("ground_or_floor", yaw))
+for yaw in ground_yaws:
+    view_list.append(("ground_or_floor", yaw))
 
 # 6. Loop and call one_cycle
 for prompt_key, yaw in view_list:

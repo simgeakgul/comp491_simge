@@ -4,13 +4,13 @@ import cv2
 import numpy as np
 
 class Equirectangular:
-    def __init__(self, img_name):
-        self._img = cv2.imread(img_name, cv2.IMREAD_COLOR)
-        [self._height, self._width, _] = self._img.shape
-        print(self._img.shape)
-    
+    def __init__(self, img):
+        self._img = img
+        self._height, self._width, _ = self._img.shape
+
 
     def GetPerspective(self, FOV, THETA, PHI, height, width):
+        
         #
         # THETA is left/right angle, PHI is up/down angle, both in degree
         #
@@ -52,9 +52,15 @@ class Equirectangular:
         lat = lat / 90  * equ_cy + equ_cy
 
         
-            
-        persp = cv2.remap(self._img, lon.astype(np.float32), lat.astype(np.float32), cv2.INTER_CUBIC, borderMode=cv2.BORDER_WRAP)
-        return persp
+        src = self._img.astype(np.float32)
+        persp = cv2.remap(
+            src,
+            lon.astype(np.float32),
+            lat.astype(np.float32),
+            cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_WRAP
+        )        
+        return np.clip(persp, 0, 255).astype(np.uint8)
         
 
 

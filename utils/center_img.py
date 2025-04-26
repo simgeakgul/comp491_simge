@@ -4,14 +4,11 @@ import json
 import math
 
 from .persp_conv import perspective_to_equirectangular
-from .inpaint import pad_and_create_mask_reflect, inpaint_image
+from .inpaint import pad_and_create_mask, inpaint_image
 
 def complete_to_1024(
     image_arr: np.ndarray,
     prompts_path: str,
-    feather: int = 30,
-    guidance_scale: float = 10.0,
-    steps: int = 50
 ) -> np.ndarray:
 
     with open(prompts_path, 'r') as f:
@@ -35,8 +32,8 @@ def complete_to_1024(
     if missing_w > 2:
         left  = missing_w // 2
         right = missing_w - left
-        padded, mask = pad_and_create_mask_reflect(
-            image_arr, left, right, 0, 0, feather
+        padded, mask = pad_and_create_mask(
+            image_arr, left, right, 0, 0
         )
         image_arr = inpaint_image(padded, mask, side_prompt, guidance_scale, steps)
 
@@ -45,8 +42,8 @@ def complete_to_1024(
     missing_h = 1024 - h
     if missing_h > 2:
         top = math.ceil(missing_h / 2)
-        padded, mask = pad_and_create_mask_reflect(
-            image_arr, 0, 0, top, 0, feather
+        padded, mask = pad_and_create_mask(
+            image_arr, 0, 0, top, 0
         )
         image_arr = inpaint_image(padded, mask, sky_prompt, guidance_scale, steps)
 
@@ -55,8 +52,8 @@ def complete_to_1024(
     missing_h = 1024 - h
     if missing_h > 2:
         bottom = missing_h
-        padded, mask = pad_and_create_mask_reflect(
-            image_arr, 0, 0, 0, bottom, feather
+        padded, mask = pad_and_create_mask(
+            image_arr, 0, 0, 0, bottom
         )
         image_arr = inpaint_image(padded, mask, bottom_prompt, guidance_scale, steps)
 

@@ -1,5 +1,6 @@
 import cv2
 import os
+import json
 from PIL import Image
 from pathlib import Path
 from typing import Tuple, Union
@@ -23,10 +24,7 @@ def one_cycle(
     yaw: float,
     pitch: float = 0.0,
     fov: float = 90.0,
-    prompt: str = (
-        "Continue the alpine scene: pine trees and ground, "
-        "matching the original artist’s soft brush strokes, lighting and color palette"
-    ),
+    prompt: str = "",
     dilate_px: int = 16,
     guidance_scale: float = 8.0,
     steps: int = 50
@@ -37,20 +35,18 @@ def one_cycle(
         yaw=yaw,
         pitch=pitch,
         fov=fov,
-        width=512,
-        height=256
+        width=1024,
+        height=512
     )
 
-    p_name = f"1_persp_{int(yaw)}.jpg"
-    save_image(p_name, persp)
+    save_image(f"1_persp_{int(yaw)}.jpg", persp)
 
-    # 2) get hard & soft masks from the black areas
     mask = load_mask_from_black(
         persp,
         dilate_px=dilate_px,
     )
 
-    save_image("2_hard_mask.jpg", hard)
+    save_image(f"2_mask_{int(yaw)}.jpg", mask)
 
     # 3) inpaint that crop
     result = inpaint_image(
@@ -61,15 +57,14 @@ def one_cycle(
         steps=steps
     )
 
-    r_name = f"4_painted_{int(yaw)}.jpg"
-    save_image(r_name, result)
+    save_image(f"3_painted_{int(yaw)}.jpg", result)
 
     # 4) blend it back into pano
     pano_filled = blend_patch_into_pano(
         pano=pano,
         tile=result,
-        hard_mask=hard_mask,
-        soft_mask=soft_mask,
+        mask=mask,
+        dilate=dilate_px,
         yaw=yaw,
         pitch=pitch,
         fov=fov
@@ -83,17 +78,63 @@ image = cv2.imread("input.jpg")
 
 resized = cv2.imread("resized.jpg")
 pano = center_image(resized)
-save_image("5_pano.jpg", pano)
 
-pano0 = one_cycle(pano, yaw=45)
-save_image("6_pano0.jpg", pano0)
 
-# pano1 = one_cycle(pano0, yaw=315)
-# save_image("pano1.jpg", pano1)
 
-# pano2 = one_cycle(pano1, yaw=90)
-# save_image("pano2.jpg", pano2)
+with open('prompts.json', 'r') as file:
+    prompts = json.load(file)
 
-# pano3 = one_cycle(pano2, yaw=270)
-# save_image("pano3.jpg", pano3)
+
+pitch_map = {
+    "atmosphere":      0.0,    # horizontal band
+    "sky_or_ceiling": 90.0,    # looking straight up
+    "ground_or_floor": -90.0,  # looking straight down
+}
+
+# 3. Define all yaw angles per category  
+horizontal_yaws = [0, 45, 90, 135, 180, 225, 270, 315]
+sky_yaws        = [0, 90, 180, 270]
+ground_yaws     = [0, 90, 180, 270]
+
+# 4. Choose FOV per category (optional tweak)
+fov_map = {
+    "atmosphere":      90.0,
+    "sky_or_ceiling": 120.0,
+    "ground_or_floor":120.0,
+}
+
+# 5. Build a list of (prompt_key, yaw) pairs
+view_list = []
+for yaw in horizontal_yaws:
+    view_list.append(("atmosphere", yaw))
+
+# for yaw in sky_yaws:
+#     view_list.append(("sky_or_ceiling", yaw))
+# for yaw in ground_yaws:
+#     view_list.append(("ground_or_floor", yaw))
+
+# 6. Loop and call one_cycle
+for prompt_key, yaw in view_list:
+    pitch       = pitch_map[prompt_key]
+    prompt_text = prompts[prompt_key]
+    fov         = fov_map.get(prompt_key)
+    pano = one_cycle(
+        pano=pano,
+        yaw=yaw,
+        pitch=pitch,
+        fov=fov,
+        prompt=prompt_text,
+        dilate_px=16,
+        guidance_scale=8.0,
+        steps=45
+    )
+
+    save_image(f"pano_{prompt_key}_{int(yaw)}.jpg", pano)
+
+
+
+
+save_image("full_pano.jpg", pano)
+
+
 

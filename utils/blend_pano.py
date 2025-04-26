@@ -1,46 +1,40 @@
 import numpy as np   
+import cv2
 from utils.persp_conv import perspective_to_equirectangular 
-
 def blend_patch_into_pano(
     pano: np.ndarray,
     tile: np.ndarray,
-    hard_mask: np.ndarray,
-    soft_mask: np.ndarray,
+    mask: np.ndarray,
+    dilate: int,
     yaw: float,
     pitch: float,
     fov: float
 ) -> np.ndarray:
+    """
+    Paste only the original (non-dilated) inpainted pixels from `tile` back into `pano`.
+    
+    - Erodes `mask` by `dilate` to undo the dilation step.
+    - Warps both the inpainted `tile` and the eroded mask back to the panorama.
+    - Copies only the eroded-mask pixels from the warped tile into the pano.
+    """
+    # 1) remove dilation
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate, dilate))
+    mask_nodilate = cv2.erode(mask, kernel, iterations=1)
 
+    # 2) warp tile and eroded mask back into pano coords
     H, W = pano.shape[:2]
+    warped_tile = perspective_to_equirectangular(
+        tile, yaw=yaw, pitch=pitch, fov=fov, width=W, height=H
+    )
+    # ensure single-channel mask for warping
+    warped_mask = perspective_to_equirectangular(
+        mask_nodilate, yaw=yaw, pitch=pitch, fov=fov, width=W, height=H
+    )
+    # binarize
+    mask_bool = warped_mask > 127
 
-    # 1) Reproject the tile into the panorama frame
-    patch = perspective_to_equirectangular(tile, yaw=yaw, pitch=pitch, fov=fov, width=W, height=H)
+    # 3) composite
+    pano_filled = pano.copy()
+    pano_filled[mask_bool] = warped_tile[mask_bool]
 
-    # 2) Prepare masks as 0/255 uint8
-    hm_bin = (hard_mask.astype(bool)).astype(np.uint8) * 255
-    sm_f = soft_mask.astype(np.float32)
-    sm_arr = (sm_f * 255).astype(np.uint8) if sm_f.max() <= 1.0 else sm_f.astype(np.uint8)
-
-    # 3) Stack to 3‐channel so we can reuse the projection API
-    hm3 = np.stack([hm_bin]*3, axis=-1)
-    sm3 = np.stack([sm_arr]*3, axis=-1)
-
-    # 4) Warp both masks back onto the pano
-    warped_hm3 = perspective_to_equirectangular(hm3, yaw=yaw, pitch=pitch, fov=fov, width=W, height=H)
-    warped_sm3 = perspective_to_equirectangular(sm3, yaw=yaw, pitch=pitch, fov=fov, width=W, height=H)
-
-    # 5) Extract boolean hard mask and float soft mask
-    warped_hard = warped_hm3[..., 0] > 128
-    warped_soft = warped_sm3[..., 0].astype(np.float32) / 255.0
-
-    # 6) Build alpha map (H×W×1)
-    alpha = np.zeros((H, W), np.float32)
-    alpha[warped_hard] = warped_soft[warped_hard]
-    alpha = alpha[..., None]
-
-    # 7) Alpha-blend
-    pano_f  = pano.astype(np.float32)
-    patch_f = patch.astype(np.float32)
-    blended = pano_f * (1 - alpha) + patch_f * alpha
-
-    return blended.astype(np.uint8)
+    return pano_filled

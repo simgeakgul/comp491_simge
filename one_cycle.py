@@ -35,7 +35,7 @@ def one_cycle(
         yaw=yaw,
         pitch=pitch,
         fov=fov,
-        width=1024,
+        width=2048,
         height=1024
     )
 
@@ -107,8 +107,10 @@ fov_map = {
 view_list = []
 for yaw in horizontal_yaws:
     view_list.append(("atmosphere", yaw))
-for yaw in sky_yaws:
-    view_list.append(("sky_or_ceiling", yaw))
+
+# for yaw in sky_yaws:
+#     view_list.append(("sky_or_ceiling", yaw))
+
 # for yaw in ground_yaws:
 #     view_list.append(("ground_or_floor", yaw))
 

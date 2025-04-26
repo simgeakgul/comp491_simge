@@ -36,7 +36,7 @@ def one_cycle(
         pitch=pitch,
         fov=fov,
         width=1024,
-        height=512
+        height=1024
     )
 
     save_image(f"1_persp_{int(yaw)}.jpg", persp)
@@ -92,7 +92,7 @@ pitch_map = {
 }
 
 # 3. Define all yaw angles per category  
-horizontal_yaws = [0, 45, 90, 135, 180, 225, 270, 315]
+horizontal_yaws = [45, -45, 90, -90, 135, -135]
 sky_yaws        = [0, 90, 180, 270]
 ground_yaws     = [0, 90, 180, 270]
 
@@ -107,9 +107,8 @@ fov_map = {
 view_list = []
 for yaw in horizontal_yaws:
     view_list.append(("atmosphere", yaw))
-
-# for yaw in sky_yaws:
-#     view_list.append(("sky_or_ceiling", yaw))
+for yaw in sky_yaws:
+    view_list.append(("sky_or_ceiling", yaw))
 # for yaw in ground_yaws:
 #     view_list.append(("ground_or_floor", yaw))
 
@@ -125,16 +124,12 @@ for prompt_key, yaw in view_list:
         fov=fov,
         prompt=prompt_text,
         dilate_px=16,
-        guidance_scale=8.0,
-        steps=45
+        guidance_scale=11.0,
+        steps=50
     )
 
     save_image(f"pano_{prompt_key}_{int(yaw)}.jpg", pano)
 
-
-
-
 save_image("full_pano.jpg", pano)
-
 
 

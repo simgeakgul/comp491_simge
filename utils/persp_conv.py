@@ -42,13 +42,13 @@ def equirectangular_to_perspective(
     u = (lon + np.pi) / (2*np.pi) * equi_w
     v = (np.pi/2 - lat)   / np.pi      * equi_h
 
-    # remap
     return cv2.remap(
         equi_img,
         u.astype(np.float32),
         v.astype(np.float32),
         interpolation=cv2.INTER_LINEAR,
-        borderMode=cv2.BORDER_WRAP
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0
     )
 
 

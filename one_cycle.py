@@ -14,6 +14,8 @@ from utils.inpaint import load_mask_from_black, inpaint_image
 from utils.blend_pano import blend_patch_into_pano
 
 DEBUG_FOLDER = "debug_images"
+os.makedirs(DEBUG_FOLDER, exist_ok=True)
+id = 0
 
 def save_image(filename, image):
     full_path = os.path.join(DEBUG_FOLDER, filename)
@@ -30,23 +32,23 @@ def one_cycle(
     steps: int = 50
 ) -> np.ndarray:
 
+    global id
+    view_tag = f"{int(id)}_pitch{int(pitch)}_yaw{int(yaw)}"
+
     persp = equirectangular_to_perspective(
         pano,
         yaw=yaw,
         pitch=pitch,
         fov=fov,
-        width=1024,
-        height=1024
+        width=512,
+        height=512
     )
 
-    save_image(f"1_persp_{int(yaw)}.jpg", persp)
+    save_image(f"{view_tag}_0_persp.jpg", persp)
 
-    mask = load_mask_from_black(
-        persp,
-        dilate_px=dilate_px,
-    )
+    mask = load_mask_from_black(persp)
 
-    save_image(f"2_mask_{int(yaw)}.jpg", mask)
+    save_image(f"{view_tag}_1_mask.jpg", mask)
 
     # 3) inpaint that crop
     result = inpaint_image(
@@ -57,29 +59,29 @@ def one_cycle(
         steps=steps
     )
 
-    save_image(f"3_painted_{int(yaw)}.jpg", result)
+    save_image(f"{view_tag}_2_painted.jpg", result)
 
     # 4) blend it back into pano
     pano_filled = blend_patch_into_pano(
         pano=pano,
         tile=result,
         mask=mask,
-        dilate=dilate_px,
         yaw=yaw,
         pitch=pitch,
         fov=fov
     )
 
+    save_image(f"{view_tag}_3_pano.jpg", pano_filled)
+    id = id + 1
     return pano_filled
 
 
-image = cv2.imread("input.jpg")
+# image = cv2.imread("input.jpg")
 # resized = complete_to_1024(image_arr = image,  prompts_path = "prompts.json")
+# save_image("resized1.jpg", resized)
 
 resized = cv2.imread("resized.jpg")
-pano = center_image(resized, fov_deg=90)
-
-
+pano = center_image(resized, fov_deg=80)
 
 with open('prompts.json', 'r') as file:
     prompts = json.load(file)
@@ -87,21 +89,21 @@ with open('prompts.json', 'r') as file:
 
 pitch_map = {
     "atmosphere":       0.0,    # horizontal band
-    "sky_or_ceiling":   90.0,    # looking straight up
-    "ground_or_floor": -90.0,  # looking straight down
+    "sky_or_ceiling":   60.0,    # looking straight up
+    "ground_or_floor": -60.0,  # looking straight down
 }
 
 # 3. Define all yaw angles per category  
-horizontal_yaws = [0, 45, 90, 135, 180, 225, 270, 315]
+horizontal_yaws = [45, -45, 90, -90, 135, -135, 180, -180]
 sky_yaws        = [0, 90, 180, 270]
 ground_yaws     = [0, 90, 180, 270]
 
 
 # 4. Choose FOV per category (optional tweak)
 fov_map = {
-    "atmosphere":      90.0,
-    "sky_or_ceiling": 120.0,
-    "ground_or_floor":120.0,
+    "atmosphere":      80.0,
+    "sky_or_ceiling":  120.0,
+    "ground_or_floor": 120.0,
 }
 
 # 5. Build a list of (prompt_key, yaw) pairs
@@ -130,8 +132,6 @@ for prompt_key, yaw in view_list:
         guidance_scale=11.0,
         steps=50
     )
-
-    save_image(f"pano_{prompt_key}_{int(yaw)}.jpg", pano)
 
 save_image("full_pano.jpg", pano)
 

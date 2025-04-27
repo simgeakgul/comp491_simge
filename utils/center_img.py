@@ -35,7 +35,7 @@ def complete_to_1024(
         padded, mask = pad_and_create_mask(
             image_arr, left, right, 0, 0
         )
-        image_arr = inpaint_image(padded, mask, side_prompt, guidance_scale, steps)
+        image_arr = inpaint_image(padded, mask, side_prompt)
 
     # --- Stage 2: pad top if needed ---
     h, w = image_arr.shape[:2]
@@ -45,7 +45,7 @@ def complete_to_1024(
         padded, mask = pad_and_create_mask(
             image_arr, 0, 0, top, 0
         )
-        image_arr = inpaint_image(padded, mask, sky_prompt, guidance_scale, steps)
+        image_arr = inpaint_image(padded, mask, sky_prompt)
 
     # --- Stage 3: pad bottom if needed ---
     h, w = image_arr.shape[:2]
@@ -55,7 +55,7 @@ def complete_to_1024(
         padded, mask = pad_and_create_mask(
             image_arr, 0, 0, 0, bottom
         )
-        image_arr = inpaint_image(padded, mask, bottom_prompt, guidance_scale, steps)
+        image_arr = inpaint_image(padded, mask, bottom_prompt)
 
     # --- Final: center‐crop any slight overshoot ---
     h, w = image_arr.shape[:2]
@@ -92,3 +92,5 @@ def center_image(img, fov_deg=90, out_w=4096, out_h=2048):
     mask = wrap.any(axis=-1)
     pano[mask] = wrap[mask]
     return pano
+
+

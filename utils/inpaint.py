@@ -42,39 +42,46 @@ def pad_and_create_mask(
 
 def load_mask_from_black(
     arr: np.ndarray,
-    dilate_px: int = 16,
 ) -> (np.ndarray, np.ndarray, np.ndarray):
-
-    black = np.all(arr == 0, axis=2).astype(np.uint8)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate_px, dilate_px))
-    mask = cv2.dilate(black, kernel, iterations=1) * 255
+    mask = np.all(arr == 0, axis=2).astype(np.uint8) * 255
     return mask
-
 
 def inpaint_image(
     image_arr: np.ndarray,
     mask_arr: np.ndarray,
     prompt: str,
+    dilate_px: int = 16,
     guidance_scale: float = 10.0,
     steps: int = 50,
 ) -> np.ndarray:
+    """
+    - Dilates mask_arr for more context during diffusion.
+    - Runs StableDiffusion inpaint.
+    - Returns the full inpainted crop.
+    """
+    # 1) dilate the original mask
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate_px, dilate_px))
+    dilated_mask = cv2.dilate(mask_arr, kernel, iterations=1)
 
+    # 2) prepare PIL inputs
     image_rgb = cv2.cvtColor(image_arr, cv2.COLOR_BGR2RGB)
-    image = Image.fromarray(image_rgb)
-    mask  = Image.fromarray(mask_arr).convert("L")
+    image_pil = Image.fromarray(image_rgb)
+    mask_pil  = Image.fromarray(dilated_mask).convert("L")
 
-    # ensure dims are multiples of 8
-    w, h = image.size
-    image = image.crop((0, 0, w - w % 8, h - h % 8))
-    mask  = mask .crop((0, 0, w - w % 8, h - h % 8))
+    # 3) crop to multiples of 8
+    w, h = image_pil.size
+    w8, h8 = w - w % 8, h - h % 8
+    image_pil = image_pil.crop((0, 0, w8, h8))
+    mask_pil  = mask_pil.crop((0, 0, w8, h8))
 
+    # 4) run inpainting pipeline
     out_pil = pipe(
-        prompt            = prompt,
-        image             = image,
-        mask_image        = mask,
-        height            = image.size[1],
-        width             = image.size[0],
-        guidance_scale    = guidance_scale,
+        prompt              = prompt,
+        image               = image_pil,
+        mask_image          = mask_pil,
+        height              = h8,
+        width               = w8,
+        guidance_scale      = guidance_scale,
         num_inference_steps = steps,
     ).images[0]
 

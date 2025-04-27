@@ -35,13 +35,19 @@ def one_cycle(
     global id
     view_tag = f"{int(id)}_pitch{int(pitch)}_yaw{int(yaw)}"
 
+    H, W = pano.shape[:2]
+    px_per_degree = W / 360.0
+
+    tile_w = max(32, int(px_per_degree * fov))  
+    tile_h = tile_w  
+
     persp = equirectangular_to_perspective(
         pano,
         yaw=yaw,
         pitch=pitch,
         fov=fov,
-        width=512,
-        height=512
+        width=tile_w,
+        height=tile_h
     )
 
     save_image(f"{view_tag}_0_persp.jpg", persp)

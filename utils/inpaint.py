@@ -50,7 +50,7 @@ def inpaint_image(
     image_arr: np.ndarray,
     mask_arr: np.ndarray,
     prompt: str,
-    dilate_px: int = 4,
+    dilate_px: int = 16,
     guidance_scale: float = 10.0,
     steps: int = 50,
 ) -> np.ndarray:

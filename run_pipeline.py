@@ -1,8 +1,9 @@
 import cv2
 import json
+import os
 
 from utils.center_img import center_image, complete_to_1024
-from one_cycle import one_cycle, save_image
+from utils.one_cycle import one_cycle, save_image
 
 PITCH_MAP       = {
     "atmosphere":       0.0,
@@ -23,7 +24,6 @@ FOV_MAP         = {
 }
 
 
-DILATE_PX       = 16
 GUIDANCE_SCALE  = 11.0
 STEPS           = 50
 
@@ -59,7 +59,6 @@ def generate_full_pano( img_path: str,
             pitch=PITCH_MAP[category],
             fov=FOV_MAP.get(category, fovdeg),
             prompt=prompts[category],
-            dilate_px=DILATE_PX,
             guidance_scale=GUIDANCE_SCALE,
             steps=STEPS
         )
@@ -69,10 +68,24 @@ def generate_full_pano( img_path: str,
     print(f"Saved full pano to {out_path}")
 
 
+
+def get_files(folder_path: str) -> (str, str, str):
+
+    img_path = os.path.join(folder_path, "input.jpg")
+    prompts_path = os.path.join(folder_path, "prompts.json")
+    pano_path = os.path.join(folder_path, "pano.jpg")
+
+    return img_path, prompts_path, pano_path
+
+
+
 def main():
-    generate_full_pano( img_path    = "venus.jpg",
-                        out_path    = "venus_pano.jpg",
-                        prompts_path= "venus_prompts.json",
+
+    img_path, prompts_path, pano_path = get_files("landscape")
+
+    generate_full_pano( img_path    = img_path,
+                        out_path    = pano_path,
+                        prompts_path= prompts_path,
                         fovdeg      = 90.0)
 
     

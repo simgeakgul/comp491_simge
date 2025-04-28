@@ -4,7 +4,8 @@ import json
 from PIL import Image
 from pathlib import Path
 from typing import Tuple, Union
-import numpy as np                
+import numpy as np     
+
 from utils.persp_conv import (
     equirectangular_to_perspective,
     perspective_to_equirectangular
@@ -27,7 +28,6 @@ def one_cycle(
     pitch: float = 0.0,
     fov: float = 90.0,
     prompt: str = "",
-    dilate_px: int = 16,
     guidance_scale: float = 8.0,
     steps: int = 50
 ) -> np.ndarray:

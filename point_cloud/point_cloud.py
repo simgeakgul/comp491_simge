@@ -35,4 +35,3 @@ pipe_metric_outdoor = pipeline(
     image_processor=processor_outdoor,
     device=device
 )
-

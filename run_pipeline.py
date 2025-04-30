@@ -36,7 +36,7 @@ def generate_full_pano( img_path: str,
     image = cv2.imread(img_path)
     resized = complete_to_1024(image_arr = image,  prompts_path = prompts_path)
     pano = center_image(resized, fovdeg)
-    save_image("in_pano.jpg", pano)
+    save_image("00_in_pano.jpg", pano)
 
     # 2) Load prompts
     with open(prompts_path, "r") as f:
@@ -64,8 +64,7 @@ def generate_full_pano( img_path: str,
         )
 
     # 5) Save result
-    save_image(out_path, pano)
-    print(f"Saved full pano to {out_path}")
+    cv2.imwrite(out_path, pano)
 
 
 
@@ -81,7 +80,7 @@ def get_files(folder_path: str) -> (str, str, str):
 
 def main():
 
-    img_path, prompts_path, pano_path = get_files("landscape")
+    img_path, prompts_path, pano_path = get_files("test_folders/achilles")
 
     generate_full_pano( img_path    = img_path,
                         out_path    = pano_path,

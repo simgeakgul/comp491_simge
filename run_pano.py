@@ -7,20 +7,21 @@ from utils.one_cycle import one_cycle, save_image
 
 PITCH_MAP       = {
     "atmosphere":       0.0,
-    "sky_or_ceiling":   60.0,
-    "ground_or_floor": -60.0,
+    "sky_or_ceiling":   45.0,
+    "ground_or_floor": -45.0,
 }
 
 
-HORIZONTAL_YAWS = [45, -45, 135, -135, 90, -90, 180, -180]
+# HORIZONTAL_YAWS = [45, -45, 135, -135, 90, -90, 180, -180]
+HORIZONTAL_YAWS = [30, -30, 60, -60, 90, -90, 120, -120]
 SKY_YAWS        = [0, 90, 180, 270]
 GROUND_YAWS     = [0, 90, 180, 270]
 
 
 FOV_MAP         = {
     "atmosphere":      80.0,
-    "sky_or_ceiling":  110.0,
-    "ground_or_floor": 110.0,
+    "sky_or_ceiling":  90.0,
+    "ground_or_floor": 90.0,
 }
 
 

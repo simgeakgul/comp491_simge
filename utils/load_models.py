@@ -3,6 +3,7 @@ import torch
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
+## Depth model
 processor_depth = AutoImageProcessor.from_pretrained(
     "depth-anything/Depth-Anything-V2-Large-hf",
     use_fast=False
@@ -14,6 +15,8 @@ pipe_depth = pipeline(
     device=device
 )
 
+
+## Indoor metric
 processor_indoor = AutoImageProcessor.from_pretrained(
     "depth-anything/Depth-Anything-V2-Metric-Indoor-Large-hf",
     use_fast=False
@@ -25,6 +28,8 @@ pipe_metric_indoor = pipeline(
     device=device
 )
 
+
+## Outdoor metric
 processor_outdoor = AutoImageProcessor.from_pretrained(
     "depth-anything/Depth-Anything-V2-Metric-Outdoor-Large-hf",
     use_fast=False
@@ -35,3 +40,17 @@ pipe_metric_outdoor = pipeline(
     image_processor=processor_outdoor,
     device=device
 )
+
+def load_pipe(model_id: str):
+    if model_id == "pipe_rel":
+        return pipe_depth
+
+    elif model_id == "pipe_metric_indoor":
+        return pipe_metric_indoor
+
+    elif model_id == "pipe_metric_outdoor":
+        return pipe_metric_outdoor
+
+    else:
+        print("Model not found.")
+

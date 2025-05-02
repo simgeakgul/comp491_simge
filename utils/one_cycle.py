@@ -26,7 +26,7 @@ def one_cycle(
     pano: np.ndarray,
     yaw: float,
     pitch: float = 0.0,
-    fov: float = 90.0,
+    fov: float = 85.0,
     prompt: str = "",
     guidance_scale: float = 8.0,
     steps: int = 50

@@ -27,7 +27,7 @@ FOV_MAP         = {
 
 
 GUIDANCE_SCALE  = 6.0
-STEPS           = 50
+STEPS           = 40
 DILATE_PIXEL    = 16
 
 def generate_full_pano( img_path: str,

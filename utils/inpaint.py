@@ -24,15 +24,16 @@ def pad_and_create_mask(
     H, W = image.shape[:2]
     new_H, new_W = H + top + bottom, W + left + right
 
+    # 1) Create black canvas and blit the image
     padded = np.zeros((new_H, new_W, 3), dtype=image.dtype)
     padded[top:top+H, left:left+W] = image
 
-    margin_x = margin if (left > 0 or right > 0) else 0
-    margin_y = margin if (top > 0 or bottom > 0) else 0
-
+    # 2) Mask: white where you WANT to inpaint (the new padding),
+    #    black where you want to keep (the original image)
     mask = np.full((new_H, new_W), 255, dtype=np.uint8)
-    return padded, mask
+    mask[top:top+H, left:left+W] = 0
 
+    return padded, mask
 
 
 def load_mask_from_black(
@@ -69,9 +70,15 @@ def inpaint_image(
     image_pil = image_pil.crop((0, 0, w8, h8))
     mask_pil  = mask_pil.crop((0, 0, w8, h8))
 
+    NEG_PROMPT = (
+    "glitch, jpeg artefacts, unrealistic shadows, border, frame, text, watermark, "
+    "cropped, deformed perspective"
+    )
+
     # 4) run inpainting pipeline
     out_pil = pipe(
         prompt              = prompt,
+        negative_prompt     = NEG_PROMPT,
         image               = image_pil,
         mask_image          = mask_pil,
         height              = h8,

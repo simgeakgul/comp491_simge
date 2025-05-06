@@ -12,38 +12,43 @@ PITCH_MAP       = {
 }
 
 
+HORIZONTAL_YAWS = [45, -45, 135, -135, 90, -90]
 # HORIZONTAL_YAWS = [45, -45, 135, -135, 90, -90, 180, -180]
-HORIZONTAL_YAWS = [30, -30, 60, -60, 90, -90, 120, -120]
+# HORIZONTAL_YAWS = [30, -30, 60, -60, 90, -90, 120, -120]
 SKY_YAWS        = [0, 90, 180, 270]
 GROUND_YAWS     = [0, 90, 180, 270]
 
 
 FOV_MAP         = {
-    "atmosphere":      80.0,
-    "sky_or_ceiling":  90.0,
-    "ground_or_floor": 90.0,
+    "atmosphere":      85.0,
+    "sky_or_ceiling":  100.0,
+    "ground_or_floor": 100.0,
 }
 
 
-GUIDANCE_SCALE  = 11.0
+GUIDANCE_SCALE  = 6.0
 STEPS           = 50
+DILATE_PIXEL    = 16
 
 def generate_full_pano( img_path: str,
                         out_path:str,
                         prompts_path:str,
                         fovdeg: float) -> None:
 
-    # 1) Load image
     image = cv2.imread(img_path)
-    resized = complete_to_1024(image_arr = image,  prompts_path = prompts_path)
+
+    resized = complete_to_1024(image_arr = image,  
+                               prompts_path = prompts_path, 
+                               dilate_px = DILATE_PIXEL, 
+                               guidance_scale = GUIDANCE_SCALE, 
+                               steps = STEPS)
+
     pano = center_image(resized, fovdeg)
     save_image("00_in_pano.jpg", pano)
 
-    # 2) Load prompts
     with open(prompts_path, "r") as f:
         prompts = json.load(f)
 
-    # 3) Build list of (category, yaw)
     views = []
     for y in HORIZONTAL_YAWS:
         views.append(("atmosphere", y))
@@ -52,7 +57,6 @@ def generate_full_pano( img_path: str,
     for y in GROUND_YAWS:
         views.append(("ground_or_floor", y))
 
-    # 4) Apply one_cycle for each view
     for category, yaw in views:
         pano = one_cycle(
             pano=pano,
@@ -61,10 +65,10 @@ def generate_full_pano( img_path: str,
             fov=FOV_MAP.get(category, fovdeg),
             prompt=prompts[category],
             guidance_scale=GUIDANCE_SCALE,
-            steps=STEPS
+            steps=STEPS,
+            dilate_px=DILATE_PIXEL
         )
 
-    # 5) Save result
     cv2.imwrite(out_path, pano)
 
 
@@ -81,7 +85,7 @@ def get_files(folder_path: str) -> (str, str, str):
 
 def main():
 
-    img_path, prompts_path, pano_path = get_files("test_folders/achilles")
+    img_path, prompts_path, pano_path = get_files("test_folders/landscape")
 
     generate_full_pano( img_path    = img_path,
                         out_path    = pano_path,

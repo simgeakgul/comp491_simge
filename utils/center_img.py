@@ -9,6 +9,9 @@ from .inpaint import pad_and_create_mask, inpaint_image
 def complete_to_1024(
     image_arr: np.ndarray,
     prompts_path: str,
+    dilate_px: int, 
+    guidance_scale: float, 
+    steps: int
 ) -> np.ndarray:
 
     with open(prompts_path, 'r') as f:
@@ -35,7 +38,7 @@ def complete_to_1024(
         padded, mask = pad_and_create_mask(
             image_arr, left, right, 0, 0
         )
-        image_arr = inpaint_image(padded, mask, side_prompt)
+        image_arr = inpaint_image(padded, mask, side_prompt, dilate_px, guidance_scale, steps)
 
     # --- Stage 2: pad top if needed ---
     h, w = image_arr.shape[:2]
@@ -45,7 +48,7 @@ def complete_to_1024(
         padded, mask = pad_and_create_mask(
             image_arr, 0, 0, top, 0
         )
-        image_arr = inpaint_image(padded, mask, sky_prompt)
+        image_arr = inpaint_image(padded, mask, sky_prompt, dilate_px, guidance_scale, steps)
 
     # --- Stage 3: pad bottom if needed ---
     h, w = image_arr.shape[:2]
@@ -55,7 +58,7 @@ def complete_to_1024(
         padded, mask = pad_and_create_mask(
             image_arr, 0, 0, 0, bottom
         )
-        image_arr = inpaint_image(padded, mask, bottom_prompt)
+        image_arr = inpaint_image(padded, mask, bottom_prompt, dilate_px, guidance_scale, steps)
 
     # --- Final: center‐crop any slight overshoot ---
     h, w = image_arr.shape[:2]

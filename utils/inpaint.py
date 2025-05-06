@@ -19,7 +19,6 @@ def pad_and_create_mask(
     image: np.ndarray,
     left: int, right: int,
     top: int, bottom: int,
-    margin: int = 16,
 ) -> (np.ndarray, np.ndarray):
 
     H, W = image.shape[:2]
@@ -32,10 +31,6 @@ def pad_and_create_mask(
     margin_y = margin if (top > 0 or bottom > 0) else 0
 
     mask = np.full((new_H, new_W), 255, dtype=np.uint8)
-    mask[
-        top + margin_y : top + H - margin_y,
-        left + margin_x : left + W - margin_x
-    ] = 0
     return padded, mask
 
 
@@ -50,9 +45,9 @@ def inpaint_image(
     image_arr: np.ndarray,
     mask_arr: np.ndarray,
     prompt: str,
-    dilate_px: int = 16,
-    guidance_scale: float = 10.0,
-    steps: int = 50,
+    dilate_px: int,
+    guidance_scale: float,
+    steps: int
 ) -> np.ndarray:
     """
     - Dilates mask_arr for more context during diffusion.

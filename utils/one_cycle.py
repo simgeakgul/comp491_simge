@@ -25,11 +25,12 @@ def save_image(filename, image):
 def one_cycle(
     pano: np.ndarray,
     yaw: float,
-    pitch: float = 0.0,
-    fov: float = 85.0,
-    prompt: str = "",
-    guidance_scale: float = 8.0,
-    steps: int = 50
+    pitch: float,
+    fov: float,
+    prompt: str,
+    guidance_scale: float,
+    steps: int,
+    dilate_px: int
 ) -> np.ndarray:
 
     global id
@@ -62,7 +63,8 @@ def one_cycle(
         mask_arr=mask,
         prompt=prompt,
         guidance_scale=guidance_scale,
-        steps=steps
+        steps=steps,
+        dilate_px=dilate_px
     )
 
     save_image(f"{view_tag}_2_painted.jpg", result)

@@ -23,13 +23,8 @@ def pad_and_create_mask(
 
     H, W = image.shape[:2]
     new_H, new_W = H + top + bottom, W + left + right
-
-    # 1) Create black canvas and blit the image
     padded = np.zeros((new_H, new_W, 3), dtype=image.dtype)
     padded[top:top+H, left:left+W] = image
-
-    # 2) Mask: white where you WANT to inpaint (the new padding),
-    #    black where you want to keep (the original image)
     mask = np.full((new_H, new_W), 255, dtype=np.uint8)
     mask[top:top+H, left:left+W] = 0
 
@@ -41,6 +36,17 @@ def load_mask_from_black(
 ) -> (np.ndarray, np.ndarray, np.ndarray):
     mask = np.all(arr == 0, axis=2).astype(np.uint8) * 255
     return mask
+
+def feather_mask(mask: np.ndarray, feather_px: int = 16) -> np.ndarray:
+    """
+    Convert a binary 0/255 mask into a blurred 0‑255 alpha mask.
+    SD‑inpaint treats 0   = keep image,
+                     255 = replace with noise,
+              any 0<val<255 = blend, so style bleeds across the seam.
+    """
+    if feather_px <= 0:
+        return mask
+    return cv2.GaussianBlur(mask, (0, 0), feather_px)
 
 def inpaint_image(
     image_arr: np.ndarray,
@@ -58,6 +64,9 @@ def inpaint_image(
     # 1) dilate the original mask
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate_px, dilate_px))
     dilated_mask = cv2.dilate(mask_arr, kernel, iterations=1)
+
+    # 1.5) feather ––––––––––––––––––––––––––––––––––––––
+    dilated_mask = feather_mask(dilated_mask, feather_px=16)
 
     # 2) prepare PIL inputs
     image_rgb = cv2.cvtColor(image_arr, cv2.COLOR_BGR2RGB)
@@ -85,6 +94,7 @@ def inpaint_image(
         width               = w8,
         guidance_scale      = guidance_scale,
         num_inference_steps = steps,
+        noise_alpha         = 0.25
     ).images[0]
 
     return cv2.cvtColor(np.array(out_pil), cv2.COLOR_RGB2BGR)

@@ -20,14 +20,14 @@ GROUND_YAWS     = [0, 90, 180, 270]
 
 
 FOV_MAP         = {
-    "atmosphere":      85.0,
-    "sky_or_ceiling":  100.0,
-    "ground_or_floor": 100.0,
+    "atmosphere":      75.0,
+    "sky_or_ceiling":  90.0,
+    "ground_or_floor": 90.0,
 }
 
 
-GUIDANCE_SCALE  = 6.0
-STEPS           = 40
+GUIDANCE_SCALE  = 7.0
+STEPS           = 50
 DILATE_PIXEL    = 16
 
 def generate_full_pano( img_path: str,

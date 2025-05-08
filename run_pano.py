@@ -21,8 +21,8 @@ GROUND_YAWS     = [0, 90, 180, 270]
 
 FOV_MAP         = {
     "atmosphere":      75.0,
-    "sky_or_ceiling":  90.0,
-    "ground_or_floor": 90.0,
+    "sky_or_ceiling":  100.0,
+    "ground_or_floor": 100.0,
 }
 
 
@@ -85,7 +85,7 @@ def get_files(folder_path: str) -> (str, str, str):
 
 def main():
 
-    img_path, prompts_path, pano_path = get_files("test_folders/landscape")
+    img_path, prompts_path, pano_path = get_files("test_folders/achilles")
 
     generate_full_pano( img_path    = img_path,
                         out_path    = pano_path,

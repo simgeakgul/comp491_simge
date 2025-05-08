@@ -24,6 +24,10 @@ FOV_MAP = {                          # degrees
 
 CROP_SIZE = 1024                     # 1024×1024 crops (fits 12 GB GPU easily)
 
+# --- parameters ---------------------------------------------------
+EDGE_SIGMA = 10      # px; controls feather width
+CENTER_BIAS = 0.25   # <1 favours crop centre, >1 flattens weight
+ALIGN_DEPTH = False   # turn on/off scale alignment
 # -----------------------------------------------------------------------------
 
 
@@ -51,6 +55,12 @@ def build_depth_panorama(
     accum_depth = np.zeros((H, W), np.float32)
     accum_weight = np.zeros((H, W), np.float32)
 
+    # precompute centre bias (radial) in crop coords
+    yy, xx = np.indices((crop_size, crop_size))
+    rr = np.sqrt((xx - crop_size/2)**2 + (yy - crop_size/2)**2)
+    centre_weight = 1.0 - (rr / (crop_size/2))**CENTER_BIAS
+    centre_weight = np.clip(centre_weight, 0.0, 1.0)
+
     # ------------------------------------------------------------------ loop
     for ring_name, pitch_deg in pitch_map.items():
         fov_deg = fov_map[ring_name]
@@ -72,10 +82,12 @@ def build_depth_panorama(
             # -------- Step 3: depth prediction -----------------------------
             with torch.inference_mode():
                 out = pipe_metric(pil_img)          # dict with key "depth"
-            depth_crop = np.array(out["depth"], dtype=np.float32)  # H×W
+           
+            depth_crop = np.nan_to_num(
+                np.array(out["depth"], dtype=np.float32),
+                nan=0.0, posinf=0.0, neginf=0.0
+            )
 
-            # guard against NaNs from the network
-            depth_crop = np.nan_to_num(depth_crop, nan=0.0, posinf=0.0, neginf=0.0)
 
             # -------- Step 4a: warp depth back to equirect -----------------
             depth_equi = perspective_to_equirectangular(
@@ -87,15 +99,44 @@ def build_depth_panorama(
                 height=H,
             )
 
-            if depth_equi.ndim == 3:
-                depth_equi = cv2.cvtColor(depth_equi, cv2.COLOR_BGR2GRAY)
+            # persp to equir returns 3 channels
+            depth_equi = cv2.cvtColor(depth_equi, cv2.COLOR_BGR2GRAY)
 
-            # simple binary weight (1 ⇒ valid pixel, 0 ⇒ gap)
-            valid_mask = depth_equi > 0
+            hard_mask = (depth_crop > 0).astype(np.float32)
+            soft_mask = cv2.GaussianBlur(hard_mask, (0, 0), EDGE_SIGMA)
+            soft_mask *= centre_weight
 
-            # -------- Step 4b: fuse ----------------------------------------
-            accum_depth[valid_mask] += depth_equi[valid_mask]
-            accum_weight[valid_mask] += 1.0          # could be cosine weight
+            # stack into 3 channels so the warp sees a BGR image
+            mask_u8 = np.clip(soft_mask*255, 0, 255).astype(np.uint8)
+            fake_bgr = cv2.merge([mask_u8, mask_u8, mask_u8])            
+           
+            # DEBUG print
+            print("  soft_mask:", soft_mask.shape, "min/max =", soft_mask.min(), soft_mask.max())
+
+            weight_equi = perspective_to_equirectangular(
+                fake_bgr, yaw=yaw_deg, pitch=pitch_deg,
+                fov=fov_deg, width=W, height=H
+            )
+
+            weight_equi = weight_equi[...,0].astype(np.float32) / 255.0
+            print("  weight_equi:", weight_equi.shape,"min/max =", weight_equi.min(), weight_equi.max())
+
+            # optional: align scale of new crop to existing fusion
+            if ALIGN_DEPTH:
+                overlap = (weight_equi > 0) & (accum_weight > 0)
+                if overlap.any():
+                    d_new = depth_equi[overlap]
+                    d_old = accum_depth[overlap] / accum_weight[overlap]
+                    q_old = np.quantile(d_old, [0.2, 0.8])
+                    q_new = np.quantile(d_new, [0.2, 0.8])
+                    # prevent division by zero
+                    denom = max(q_new[1] - q_new[0], 1e-6)
+                    scale = (q_old[1] - q_old[0]) / denom
+                    depth_equi *= scale
+
+            accum_depth  += depth_equi * weight_equi
+            accum_weight += weight_equi
+
 
     # finish fusion: average where weight>0
     fused_depth = np.zeros_like(accum_depth)

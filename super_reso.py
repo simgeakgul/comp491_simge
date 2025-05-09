@@ -4,6 +4,7 @@ import numpy as np
 from pathlib import Path
 from utils.load_configs import load_config, PanoConfig
 from utils.persp_conv import perspective_to_equirectangular
+from utils.inpaint import inpaint_image
 
 def build_border_mask(
     pano: np.ndarray,
@@ -13,31 +14,48 @@ def build_border_mask(
     debug_path: str | Path = "border_mask.jpg",
 ) -> np.ndarray:
     H, W = pano.shape[:2]
-    mask = np.zeros((H, W), dtype=np.uint8)
+    mask     = np.zeros((H, W), dtype=np.uint8)  # final seam‐lines
+    coverage = np.zeros((H, W), dtype=np.uint8)  # “interiors” already seen
+
+    # kernels for edge extraction and optional dilation
     k_border = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     k_dilate = cv2.getStructuringElement(
         cv2.MORPH_ELLIPSE, (border_px*2+1, border_px*2+1)
     )
 
+    # collect all the yaw/pitch/fov triples
     all_views = []
     if center_fov is not None:
         all_views += [(0.0, 0.0, center_fov), (180.0, 0.0, center_fov)]
     all_views += views
 
     dummy = np.full((256, 256, 3), 255, dtype=np.uint8)
+
     for yaw, pitch, fov in all_views:
+        # warp a full–white square into pano coords
         w = perspective_to_equirectangular(dummy, yaw=yaw, pitch=pitch,
                                            fov=fov, width=W, height=H)
         if w.ndim == 3:
             w = cv2.cvtColor(w, cv2.COLOR_BGR2GRAY)
         tile = (w > 127).astype(np.uint8) * 255
-        border = cv2.morphologyEx(tile, cv2.MORPH_GRADIENT, k_border)
+
+        # figure out which pixels of this tile are *not* yet covered
+        new_bits = cv2.bitwise_and(tile, cv2.bitwise_not(coverage))
+
+        # extract just the boundary of those new bits
+        border = cv2.morphologyEx(new_bits, cv2.MORPH_GRADIENT, k_border)
         if border_px > 1:
             border = cv2.dilate(border, k_dilate)
+
+        # paint only the fresh border segments
         cv2.bitwise_or(mask, border, dst=mask)
+
+        # now mark the entire tile interior as “covered” for future loops
+        cv2.bitwise_or(coverage, tile, dst=coverage)
 
     cv2.imwrite(str(debug_path), mask)
     return mask
+
 
 def save_pano_with_mask_overlay(
     pano: np.ndarray,
@@ -91,51 +109,80 @@ def split_pano_and_mask(
     return tiles
 
 
+
 def main():
     base = "test_folders/achilles"
-    cfg = load_config(os.path.join(base, "config.yaml"))
+    cfg  = load_config(os.path.join(base, "config.yaml"))
 
-    pano_path = (os.path.join(base, "pano.jpg"))
-    pano = cv2.imread(pano_path)
-
+    # --- read your full pano & build the seam mask as before ---
+    pano_path = os.path.join(base, "pano.jpg")
+    pano      = cv2.imread(pano_path)
+    # build the exact same all_views you pass to one_cycle:
     all_views = []
-    for p in (-45.0, 0.0, 45.0):
-        if p == 0.0:
-            yaws, fov = cfg.horizontal_yaws, cfg.fov_map["atmosphere"]
-        elif p > 0:
-            yaws, fov = cfg.sky_yaws,       cfg.fov_map["sky_or_ceiling"]
-        else:
-            yaws, fov = cfg.ground_yaws,    cfg.fov_map["ground_or_floor"]
-        all_views += [(yaw, p, fov) for yaw in yaws]
+    for category, yaw_list in [
+        ("atmosphere",      cfg.horizontal_yaws),
+        ("sky_or_ceiling",  cfg.sky_yaws),
+        ("ground_or_floor", cfg.ground_yaws),
+    ]:
+        pitch = cfg.pitch_map[category]
+        fov   = cfg.fov_map.get(category, cfg.fovdeg)
+        for yaw in yaw_list:
+            all_views.append((yaw, pitch, fov))
 
     seam_mask = build_border_mask(
-        pano=pano,
-        views=all_views,
-        border_px=cfg.border_px,
-        center_fov=cfg.fovdeg,
-        debug_path=os.path.join(base, "border_mask.jpg")
+        pano       = pano,
+        views      = all_views,
+        border_px  = cfg.border_px,
+        center_fov = cfg.fovdeg,
+        debug_path = os.path.join(base, "border_mask.jpg")
     )
 
-    _ = save_pano_with_mask_overlay(
-        pano, seam_mask,
-        alpha=0.3,
-        color=(0, 0, 255),
-        out_path=os.path.join(base, "debug_overlay.jpg")
-    )
+    # --- now split pano & mask into tiles ---
+    vertical_num   = 2
+    horizontal_num = 4
+    tiles = split_pano_and_mask(pano, seam_mask, vertical_num, horizontal_num)
 
-    debug_tiles_folder = os.path.join(base, "debug_tiles")
-    os.makedirs(debug_tiles_folder, exist_ok=True)
+    # prepare an empty canvas for your fully inpainted pano
+    fixed_pano = np.zeros_like(pano)
 
-    tiles = split_pano_and_mask(pano, seam_mask, vertical_num=2, horizontal_num=4)
+    # prompt+inpaint params
+    prompt         = "Semales transaction"
+    dilate_px      = 1
+    guidance_scale = cfg.guidance_scale
+    steps          = cfg.steps
+
+    # --- inpaint each tile & paste it back ---
     for (row, col), info in tiles.items():
         pano_tile = info['pano']
         mask_tile = info['mask']
+        y1, y2, x1, x2 = info['coords']
 
-        pano_tile_path = os.path.join(debug_tiles_folder, f"pano_r{row}_c{col}.jpg")
-        mask_tile_path = os.path.join(debug_tiles_folder, f"mask_r{row}_c{col}.jpg")
+        # run your inpainting on this small tile
+        fixed_tile = inpaint_image(
+            image_arr      = pano_tile,
+            mask_arr       = mask_tile,
+            prompt         = prompt,
+            dilate_px      = dilate_px,
+            guidance_scale = guidance_scale,
+            steps          = steps
+        )
 
-        cv2.imwrite(pano_tile_path, pano_tile)
-        cv2.imwrite(mask_tile_path, mask_tile)
+        # paste the result back into the right region of fixed_pano
+        fixed_pano[y1:y2, x1:x2] = fixed_tile
+
+    # --- save final stitched pano ---
+    fixed_path = os.path.join(base, "fixed_pano.jpg")
+    cv2.imwrite(fixed_path, fixed_pano)
+
+    # optionally, dump out each fixed tile for inspection:
+    debug_fixed_folder = os.path.join(base, "debug_fixed_tiles")
+    os.makedirs(debug_fixed_folder, exist_ok=True)
+    for (row, col), info in tiles.items():
+        y1, y2, x1, x2 = info['coords']
+        cv2.imwrite(
+            os.path.join(debug_fixed_folder, f"fixed_r{row}_c{col}.jpg"),
+            fixed_pano[y1:y2, x1:x2]
+        )
 
 if __name__ == "__main__":
     main()

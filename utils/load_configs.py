@@ -15,6 +15,12 @@ class PanoConfig:
     fovdeg:             float
     border_px:          int
 
+    crop_size:          int
+    edge_sigma:         float
+    center_bias:        float
+    align_depth:        bool
+    in_out:             str
+
 def load_config(path: str | Path = "config.yaml") -> PanoConfig:
     data = yaml.safe_load(Path(path).read_text())
     return PanoConfig(
@@ -28,4 +34,10 @@ def load_config(path: str | Path = "config.yaml") -> PanoConfig:
         dilate_pixel   = data["dilate_pixel"],
         fovdeg         = data["fovdeg"],
         border_px      = data["border_px"],
+
+        crop_size      = data["crop_size"],
+        edge_sigma     = data["edge_sigma"],
+        center_bias    = data["center_bias"],
+        align_depth    = data["align_depth"],
+        in_out         = data["in_out"],
     )

@@ -2,9 +2,8 @@ import cv2
 import os
 import numpy as np
 from pathlib import Path
-from utils.load_configs import load_config, PanoConfig
-from utils.persp_conv import perspective_to_equirectangular
-from utils.inpaint import inpaint_image
+from .load_configs import load_config, PanoConfig
+from .persp_conv import perspective_to_equirectangular
 
 def build_border_mask(
     pano: np.ndarray,
@@ -108,81 +107,3 @@ def split_pano_and_mask(
             }
     return tiles
 
-
-
-def main():
-    base = "test_folders/achilles"
-    cfg  = load_config(os.path.join(base, "config.yaml"))
-
-    # --- read your full pano & build the seam mask as before ---
-    pano_path = os.path.join(base, "pano.jpg")
-    pano      = cv2.imread(pano_path)
-    # build the exact same all_views you pass to one_cycle:
-    all_views = []
-    for category, yaw_list in [
-        ("atmosphere",      cfg.horizontal_yaws),
-        ("sky_or_ceiling",  cfg.sky_yaws),
-        ("ground_or_floor", cfg.ground_yaws),
-    ]:
-        pitch = cfg.pitch_map[category]
-        fov   = cfg.fov_map.get(category, cfg.fovdeg)
-        for yaw in yaw_list:
-            all_views.append((yaw, pitch, fov))
-
-    seam_mask = build_border_mask(
-        pano       = pano,
-        views      = all_views,
-        border_px  = cfg.border_px,
-        center_fov = cfg.fovdeg,
-        debug_path = os.path.join(base, "border_mask.jpg")
-    )
-
-    # --- now split pano & mask into tiles ---
-    vertical_num   = 2
-    horizontal_num = 4
-    tiles = split_pano_and_mask(pano, seam_mask, vertical_num, horizontal_num)
-
-    # prepare an empty canvas for your fully inpainted pano
-    fixed_pano = np.zeros_like(pano)
-
-    # prompt+inpaint params
-    prompt         = "Semales transaction"
-    dilate_px      = 1
-    guidance_scale = cfg.guidance_scale
-    steps          = cfg.steps
-
-    # --- inpaint each tile & paste it back ---
-    for (row, col), info in tiles.items():
-        pano_tile = info['pano']
-        mask_tile = info['mask']
-        y1, y2, x1, x2 = info['coords']
-
-        # run your inpainting on this small tile
-        fixed_tile = inpaint_image(
-            image_arr      = pano_tile,
-            mask_arr       = mask_tile,
-            prompt         = prompt,
-            dilate_px      = dilate_px,
-            guidance_scale = guidance_scale,
-            steps          = steps
-        )
-
-        # paste the result back into the right region of fixed_pano
-        fixed_pano[y1:y2, x1:x2] = fixed_tile
-
-    # --- save final stitched pano ---
-    fixed_path = os.path.join(base, "fixed_pano.jpg")
-    cv2.imwrite(fixed_path, fixed_pano)
-
-    # optionally, dump out each fixed tile for inspection:
-    debug_fixed_folder = os.path.join(base, "debug_fixed_tiles")
-    os.makedirs(debug_fixed_folder, exist_ok=True)
-    for (row, col), info in tiles.items():
-        y1, y2, x1, x2 = info['coords']
-        cv2.imwrite(
-            os.path.join(debug_fixed_folder, f"fixed_r{row}_c{col}.jpg"),
-            fixed_pano[y1:y2, x1:x2]
-        )
-
-if __name__ == "__main__":
-    main()

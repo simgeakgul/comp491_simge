@@ -7,7 +7,7 @@ from utils.inpaint import inpaint_image
 
 
 def main():
-    base = "test_folders/achilles"
+    base = "test_folders/landscape"
     cfg  = load_config(os.path.join(base, "config.yaml"))
 
     pano_path = os.path.join(base, "pano.jpg")
@@ -61,14 +61,14 @@ def main():
     fixed_path = os.path.join(base, "fixed_pano.jpg")
     cv2.imwrite(fixed_path, fixed_pano)
 
-    debug_fixed_folder = os.path.join(base, "debug_fixed_tiles")
-    os.makedirs(debug_fixed_folder, exist_ok=True)
-    for (row, col), info in tiles.items():
-        y1, y2, x1, x2 = info['coords']
-        cv2.imwrite(
-            os.path.join(debug_fixed_folder, f"fixed_r{row}_c{col}.jpg"),
-            fixed_pano[y1:y2, x1:x2]
-        )
+    # debug_fixed_folder = os.path.join(base, "debug_fixed_tiles")
+    # os.makedirs(debug_fixed_folder, exist_ok=True)
+    # for (row, col), info in tiles.items():
+    #     y1, y2, x1, x2 = info['coords']
+    #     cv2.imwrite(
+    #         os.path.join(debug_fixed_folder, f"fixed_r{row}_c{col}.jpg"),
+    #         fixed_pano[y1:y2, x1:x2]
+    #     )
 
 if __name__ == "__main__":
     main()

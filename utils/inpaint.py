@@ -1,19 +1,10 @@
+from .load_models import load_pipe
 from PIL import Image, ImageOps, ImageFilter
 import torch
-from diffusers import StableDiffusionInpaintPipeline
 import numpy as np
 import cv2
 
-device ="cuda" if torch.cuda.is_available() else "cpu"
-
-pipe = StableDiffusionInpaintPipeline.from_pretrained(
-    "stabilityai/stable-diffusion-2-inpainting",
-    torch_dtype=torch.float16 if device == "cuda" else torch.float32,
-).to(device)
-pipe.feature_extractor.do_resize = False
-pipe.feature_extractor.size = None
-pipe.safety_checker = None
-
+pipe = load_pipe(model_id = "diffusion")
 
 def pad_and_create_mask(
     image: np.ndarray,
@@ -84,6 +75,7 @@ def inpaint_image(
     "cropped, deformed perspective"
     )
 
+    
     # 4) run inpainting pipeline
     out_pil = pipe(
         prompt              = prompt,

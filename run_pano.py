@@ -66,7 +66,7 @@ def get_files(folder_path: str) -> tuple[str,str,str]:
 
 
 def main():
-    base = "test_folders/achilles"
+    base = "test_folders/landscape"
     img_path, prompts_path, pano_path, conf_path = get_files(base)
     cfg = load_config(conf_path)
 

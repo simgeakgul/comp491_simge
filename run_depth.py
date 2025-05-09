@@ -6,7 +6,7 @@ from utils.depth_prediction import build_depth_panorama
 
 def main():
     # load yaml config into dataclass
-    base = "test_folders/achilles"
+    base = "test_folders/landscape"
     cfg  = load_config(os.path.join(base, "config.yaml"))
 
     # build yaw_lists dict from cfg
@@ -39,8 +39,8 @@ def main():
     # save NumPy and visualization
     depth_map = os.path.join(base, "depth_pano.jpg")
     # dept_points = os.path.join(base, "pano_depth.npy")
+    # np.save(dept_points, depth_pano)
 
-    np.save(dept_points, depth_pano)
     vis = np.zeros_like(depth_pano)
     nz = depth_pano > 0
     if nz.any():

@@ -25,8 +25,8 @@ FOV_MAP = {                          # degrees
 CROP_SIZE = 1024                     # 1024×1024 crops (fits 12 GB GPU easily)
 
 # --- parameters ---------------------------------------------------
-EDGE_SIGMA = 10      # px; controls feather width
-CENTER_BIAS = 0.25   # <1 favours crop centre, >1 flattens weight
+EDGE_SIGMA = 5      # px; controls feather width
+CENTER_BIAS = 0.5   # <1 favours crop centre, >1 flattens weight
 ALIGN_DEPTH = False   # turn on/off scale alignment
 # -----------------------------------------------------------------------------
 
@@ -101,25 +101,26 @@ def build_depth_panorama(
 
             # persp to equir returns 3 channels
             depth_equi = cv2.cvtColor(depth_equi, cv2.COLOR_BGR2GRAY)
+            depth_equi = depth_equi.astype(np.float32)
 
             hard_mask = (depth_crop > 0).astype(np.float32)
-            soft_mask = cv2.GaussianBlur(hard_mask, (0, 0), EDGE_SIGMA)
+
+            kernel = np.ones((5,5), np.uint8)
+            inner = cv2.erode(hard_mask, kernel, iterations=1)
+            
+            soft_mask = cv2.GaussianBlur(inner, (0, 0), EDGE_SIGMA)
             soft_mask *= centre_weight
 
             # stack into 3 channels so the warp sees a BGR image
             mask_u8 = np.clip(soft_mask*255, 0, 255).astype(np.uint8)
             fake_bgr = cv2.merge([mask_u8, mask_u8, mask_u8])            
            
-            # DEBUG print
-            print("  soft_mask:", soft_mask.shape, "min/max =", soft_mask.min(), soft_mask.max())
-
             weight_equi = perspective_to_equirectangular(
                 fake_bgr, yaw=yaw_deg, pitch=pitch_deg,
                 fov=fov_deg, width=W, height=H
             )
 
             weight_equi = weight_equi[...,0].astype(np.float32) / 255.0
-            print("  weight_equi:", weight_equi.shape,"min/max =", weight_equi.min(), weight_equi.max())
 
             # optional: align scale of new crop to existing fusion
             if ALIGN_DEPTH:

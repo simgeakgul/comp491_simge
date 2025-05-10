@@ -2,7 +2,7 @@ import cv2
 import json
 import argparse
 import os
-from utils.center_img import center_image, complete_to_1024
+from utils.center_img import center_image, complete_to_square
 from utils.one_cycle import one_cycle
 from utils.load_configs import load_config, PanoConfig
 
@@ -14,16 +14,18 @@ def generate_full_pano(
 ) -> None:
     # 1) read and super-res
     image = cv2.imread(img_path)
-    resized = complete_to_1024(
+
+
+    resized = complete_to_square(
         image_arr     = image,
-        prompts_path  = prompts_path,
+        json_path     = prompts_path,
         dilate_px     = cfg.dilate_pixel,
         guidance_scale= cfg.guidance_scale,
         steps         = cfg.steps,
     )
 
     # 2) center the front view
-    pano = center_image(resized, cfg.fovdeg)
+    pano = center_image(resized, cfg.fovdeg, cfg.out_w, cfg.out_h)
 
     # 3) load prompts
     with open(prompts_path, "r") as f:

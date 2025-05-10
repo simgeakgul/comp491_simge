@@ -68,7 +68,7 @@ def save_pano_with_mask_overlay(
     color_mask = np.zeros_like(pano, dtype=np.uint8)
     color_mask[bin_mask == 1] = color
     overlay = cv2.addWeighted(pano, 1.0, color_mask, alpha, 0)
-    # cv2.imwrite(out_path, overlay)
+    cv2.imwrite(out_path, overlay)
 
     return overlay
 

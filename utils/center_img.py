@@ -6,76 +6,96 @@ from typing import Tuple
 
 from .persp_conv import perspective_to_equirectangular
 from .inpaint import load_mask_from_black, inpaint_image
+import json
+import cv2
+import numpy as np
 
 
-def _resize_and_center(
-    img: np.ndarray, target: int = 1024
-) -> Tuple[np.ndarray, Tuple[int, int], Tuple[int, int]]:
-    h, w = img.shape[:2]
-    if h >= w:
-        new_h, new_w = target, int(w * target / h)
-        resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
-        top, left = 0, (target - new_w) // 2
-    else:
-        new_h, new_w = int(h * target / w), target
-        resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
-        top, left = (target - new_h) // 2, 0
+def _make_region_mask(h: int, w: int, region: str, pad: int) -> np.ndarray:
+    """
+    Create a binary (0/255) mask for *one* padded region of a square canvas.
 
-    canvas = np.zeros((target, target, 3), dtype=np.uint8)
-    canvas[top: top + new_h, left: left + new_w] = resized
-    return canvas, (top, left), (new_h, new_w)
+    Parameters
+    ----------
+    h, w : full-canvas height and width   (h == w == n)
+    region : {"top", "bottom", "left", "right"}
+    pad    : pixel thickness of that region
+
+    Returns
+    -------
+    uint8 mask of shape (h, w) with 255 in the region, else 0.
+    """
+    mask = np.zeros((h, w), np.uint8)
+    if region == "top":        # first `pad` rows
+        mask[:pad, :] = 255
+    elif region == "bottom":   # last  `pad` rows
+        mask[h - pad :, :] = 255
+    elif region == "left":     # first `pad` cols
+        mask[:, :pad] = 255
+    elif region == "right":    # last  `pad` cols
+        mask[:, w - pad :] = 255
+    return mask
 
 
-def complete_to_1024(
+def complete_to_square(
     image_arr: np.ndarray,
-    prompts_path: str,
+    json_path: str,
     dilate_px: int,
     guidance_scale: float,
     steps: int,
 ) -> np.ndarray:
-    # 1) centre on a 1024×1024 canvas
-    canvas, (top, left), (new_h, new_w) = _resize_and_center(image_arr, 1024)
-    if new_h == 1024 and new_w == 1024:
-        return canvas                         # nothing to fill
+    """
+    Expand `image_arr` to an n × n square using SD in-painting, driven by prompts
+    stored in `json_path`.
 
-    # 2) read prompts --------------------------------------------------------
-    try:
-        prompt_dict = json.loads(Path(prompts_path).read_text(encoding="utf-8"))
-        if not isinstance(prompt_dict, dict):
-            raise ValueError
-    except Exception:
-        txt = Path(prompts_path).read_text(encoding="utf-8").strip()
-        prompt_dict = {"atmosphere": txt,
-                       "sky_or_ceiling": txt,
-                       "ground_or_floor": txt}
+    JSON structure
+    --------------
+    {
+      "atmosphere":      "...",   # for left/right padding (portrait images)
+      "sky_or_ceiling":  "...",   # for TOP padding   (landscape images)
+      "ground_or_floor": "..."    # for BOTTOM padding
+    }
+    """
+    h, w = image_arr.shape[:2]
+    if h == w:
+        return image_arr.copy()
 
-    # 3) build one mask that covers *all* black pixels -----------------------
-    mask = load_mask_from_black(canvas)
-    if mask.max() == 0:
-        return canvas                         # nothing to in-paint
+    # --- load prompts --------------------------------------------------------
+    with open(json_path, "r", encoding="utf-8") as jf:
+        prm = json.load(jf)
 
+    n   = max(h, w)
+    pad = (n - min(h, w)) // 2
 
+    # --- place original in the middle of a black canvas ----------------------
+    canvas = np.zeros((n, n, 3), dtype=image_arr.dtype)
+    y0     = (n - h) // 2
+    x0     = (n - w) // 2
+    canvas[y0:y0 + h, x0:x0 + w] = image_arr
 
-    # 4) choose a single prompt ---------------------------------------------
-    if new_w < 1024:                  # black bands are left & right
-        prompt = prompt_dict.get("atmosphere", "")
-    else:                             # black bands are top & bottom
-        prompt = (
-            (prompt_dict.get("sky_or_ceiling", "") + " ").strip() +
-            prompt_dict.get("ground_or_floor", "")
-        ).strip()
+    if w > h:
+        # 1) TOP  — sky / ceiling
+        top_mask = _make_region_mask(n, n, "top", pad)
+        canvas   = inpaint_image(
+            canvas, top_mask, prm["sky_or_ceiling"],
+            dilate_px, guidance_scale, steps
+        )
 
-    # 5) one-shot in-paint ---------------------------------------------------
-    canvas = inpaint_image(
-        canvas, mask, prompt,
-        dilate_px=dilate_px,
-        guidance_scale=guidance_scale,
-        steps=steps,
-    )
+        # 2) BOTTOM — ground / floor
+        bottom_mask = _make_region_mask(n, n, "bottom", pad)
+        canvas      = inpaint_image(
+            canvas, bottom_mask, prm["ground_or_floor"],
+            dilate_px, guidance_scale, steps
+        )
+
+    else:  # h > w
+        side_mask = load_mask_from_black(canvas)   
+        canvas = inpaint_image(
+            canvas, side_mask, prm["atmosphere"],
+            dilate_px, guidance_scale, steps
+        )
 
     return canvas
-
-
 
 
 

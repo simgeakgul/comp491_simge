@@ -73,6 +73,11 @@ def main():
     fixed_path = os.path.join(base, "fixed_pano.jpg")
     cv2.imwrite(fixed_path, fixed_pano)
 
+    # save_pano_with_mask_overlay(
+    #     pano = pano,
+    #     mask = seam_mask,
+    # ) 
+
     # debug_fixed_folder = os.path.join(base, "debug_fixed_tiles")
     # os.makedirs(debug_fixed_folder, exist_ok=True)
     # for (row, col), info in tiles.items():

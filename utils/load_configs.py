@@ -4,6 +4,10 @@ import yaml
 
 @dataclass
 class PanoConfig:
+    
+    out_w: int
+    out_h: int
+
     pitch_map:          dict[str, float]
     horizontal_yaws:    list[int]
     sky_yaws:           list[int]
@@ -24,6 +28,10 @@ class PanoConfig:
 def load_config(path: str | Path = "config.yaml") -> PanoConfig:
     data = yaml.safe_load(Path(path).read_text())
     return PanoConfig(
+
+        out_w          = data["out_w"],
+        out_h          = data["out_h"],
+
         pitch_map      = data["pitch_map"],
         horizontal_yaws= data["horizontal_yaws"],
         sky_yaws       = data["sky_yaws"],

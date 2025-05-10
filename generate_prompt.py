@@ -41,7 +41,7 @@ def generate_three_prompts(img: Image.Image, prompts_path: str, in_out: str) -> 
             return text.split("ASSISTANT:", 1)[-1].strip()
         return text.strip()
 
-    sys_prompt = "You are a prompt generator for stable diffusion 2 inpaint. Build two simple sentences with simple words."
+    sys_prompt = "Build two simple sentences with simple words."
 
     prompts = {
         "atmosphere": query_llava(

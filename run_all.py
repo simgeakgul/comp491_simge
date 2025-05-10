@@ -16,9 +16,9 @@ def main():
     args = parse_args()
 
     scripts = [
-        "generate_prompt.py",
-        "run_pano.py",
-        "run_fixes.py",
+        # "generate_prompt.py",
+        # "run_pano.py",
+        # "run_fixes.py",
         "run_depth.py",
     ]
 

@@ -52,7 +52,7 @@ def build_border_mask(
         # now mark the entire tile interior as “covered” for future loops
         cv2.bitwise_or(coverage, tile, dst=coverage)
 
-    cv2.imwrite(str(debug_path), mask)
+    # cv2.imwrite(str(debug_path), mask)
     return mask
 
 
@@ -63,11 +63,13 @@ def save_pano_with_mask_overlay(
     color: tuple[int, int, int] = (0, 0, 255),
     out_path: str = "debug_overlay.jpg",
 ) -> np.ndarray:
+
     bin_mask = (mask > 127).astype(np.uint8)
     color_mask = np.zeros_like(pano, dtype=np.uint8)
     color_mask[bin_mask == 1] = color
     overlay = cv2.addWeighted(pano, 1.0, color_mask, alpha, 0)
-    cv2.imwrite(out_path, overlay)
+    # cv2.imwrite(out_path, overlay)
+
     return overlay
 
 

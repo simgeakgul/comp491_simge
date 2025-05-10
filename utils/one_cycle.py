@@ -50,12 +50,11 @@ def one_cycle(
         width=tile_w,
         height=tile_h
     )
-
-    save_image(f"{view_tag}_0_persp.jpg", persp)
-
     mask = load_mask_from_black(persp)
 
+    save_image(f"{view_tag}_0_persp.jpg", persp)
     save_image(f"{view_tag}_1_mask.jpg", mask)
+
 
     # 3) inpaint that crop
     result = inpaint_image(
@@ -81,4 +80,5 @@ def one_cycle(
 
     save_image(f"{view_tag}_3_pano.jpg", pano_filled)
     id = id + 1
+    
     return pano_filled

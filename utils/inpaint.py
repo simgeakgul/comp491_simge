@@ -41,52 +41,49 @@ def feather_mask(mask: np.ndarray, feather_px: int = 16) -> np.ndarray:
 
 def inpaint_image(
     image_arr: np.ndarray,
-    mask_arr: np.ndarray,
+    mask_arr:  np.ndarray,
     prompt: str,
     dilate_px: int,
     guidance_scale: float,
     steps: int
 ) -> np.ndarray:
-    """
-    - Dilates mask_arr for more context during diffusion.
-    - Runs StableDiffusion inpaint.
-    - Returns the full inpainted crop.
-    """
-    # 1) dilate the original mask
+
+    # 1) dilate mask ---------------------------------------------------------
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate_px, dilate_px))
     dilated_mask = cv2.dilate(mask_arr, kernel, iterations=1)
-
-    # 1.5) feather ––––––––––––––––––––––––––––––––––––––
     dilated_mask = feather_mask(dilated_mask, feather_px=16)
 
-    # 2) prepare PIL inputs
-    image_rgb = cv2.cvtColor(image_arr, cv2.COLOR_BGR2RGB)
-    image_pil = Image.fromarray(image_rgb)
+    # 2) numpy → PIL ---------------------------------------------------------
+    image_pil = Image.fromarray(cv2.cvtColor(image_arr, cv2.COLOR_BGR2RGB))
     mask_pil  = Image.fromarray(dilated_mask).convert("L")
 
-    # 3) crop to multiples of 8
+    # 3) ***PAD*** so w,h are multiples of 8 (no cropping)
     w, h = image_pil.size
-    w8, h8 = w - w % 8, h - h % 8
-    image_pil = image_pil.crop((0, 0, w8, h8))
-    mask_pil  = mask_pil.crop((0, 0, w8, h8))
+    pad_w = (8 - w % 8) % 8
+    pad_h = (8 - h % 8) % 8
+    if pad_w or pad_h:
+        image_pil = ImageOps.expand(image_pil, (0, 0, pad_w, pad_h), fill=0)
+        mask_pil  = ImageOps.expand(mask_pil,  (0, 0, pad_w, pad_h),  fill=255)
 
+    # 4) run diffusion -------------------------------------------------------
     NEG_PROMPT = (
-    "glitch, jpeg artefacts, unrealistic shadows, border, frame, text, watermark, "
-    "cropped, deformed perspective"
+        "glitch, jpeg artefacts, unrealistic shadows, border, frame, text, "
+        "watermark, cropped, deformed perspective"
     )
-
-    
-    # 4) run inpainting pipeline
     out_pil = pipe(
         prompt              = prompt,
         negative_prompt     = NEG_PROMPT,
         image               = image_pil,
         mask_image          = mask_pil,
-        height              = h8,
-        width               = w8,
+        height              = image_pil.height,
+        width               = image_pil.width,
         guidance_scale      = guidance_scale,
         num_inference_steps = steps,
-        noise_alpha         = 0.25
+        noise_alpha         = 0.25,
     ).images[0]
 
+    # 5) remove the padding so size == original ------------------------------
+    out_pil = out_pil.crop((0, 0, w, h))
+
+    # 6) PIL → numpy ---------------------------------------------------------
     return cv2.cvtColor(np.array(out_pil), cv2.COLOR_RGB2BGR)

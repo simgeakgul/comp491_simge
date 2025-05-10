@@ -1,12 +1,23 @@
 import os
 import cv2
+import argparse
 import numpy as np
 from utils.load_configs import load_config
 from utils.depth_prediction import build_depth_panorama
 
+def parse_args():
+    p = argparse.ArgumentParser(description="Compute depth panorama for a given folder")
+    p.add_argument(
+        "--base",
+        required=True,
+        help="Path to folder containing fixed_pano.jpg and config.yaml"
+    )
+    return p.parse_args()
+
 def main():
-    # load yaml config into dataclass
-    base = "test_folders/landscape"
+    args = parse_args()
+    base = args.base
+    
     cfg  = load_config(os.path.join(base, "config.yaml"))
 
     # build yaw_lists dict from cfg

@@ -1,0 +1,28 @@
+# config.yaml
+pitch_map:
+  atmosphere:      0.0
+  sky_or_ceiling:  60.0
+  ground_or_floor: -60.0
+
+horizontal_yaws: [0, 30, -30, 60, -60, 90, -90, 120, -120, 150, -150, 180]
+sky_yaws:        [0, 60, -60, 120, -120, 180]
+ground_yaws:     [0, 60, -60, 120, -120, 180]
+
+fov_map:
+  atmosphere:      80.0
+  sky_or_ceiling:  90.0
+  ground_or_floor: 90.0
+
+guidance_scale: 7.0
+steps:          50
+dilate_pixel:   16
+
+fovdeg:         90.0
+border_px:      20
+
+crop_size:      1024       
+edge_sigma:     5.0        
+center_bias:    0.5       
+align_depth:    false      # optional scale alignment
+
+in_out: "outdoor"

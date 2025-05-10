@@ -1,157 +1,93 @@
 import cv2
-import numpy as np
 import json
-import math
+import numpy as np
+from pathlib import Path
+from typing import Tuple
 
 from .persp_conv import perspective_to_equirectangular
-from .inpaint import pad_and_create_mask, inpaint_image
+from .inpaint import load_mask_from_black, inpaint_image
 
-# ----------------------------------------------------------------------
-# NEW helper
-# ----------------------------------------------------------------------
-def _inpaint_half(
-    padded: np.ndarray, mask: np.ndarray, prompt: str,
-    which: str,                 # "top" | "bottom"
-    overlap_px: int,            # keep some context from the other half
-    dilate_px: int, guidance: float, steps: int
-) -> np.ndarray:
 
-    H, W = padded.shape[:2]
-
-    if which == "top":
-        y0 = 0
-        y1 = H // 2 + overlap_px
-    else:                 # "bottom"
-        y0 = H // 2 - overlap_px
-        y1 = H
-
-    # --- make height divisible by 8 so SD won’t crop it ---
-    seg_h = y1 - y0
-    seg_h -= seg_h % 8            # drop 0‑7 extra rows
-    if which == "top":
-        y1 = y0 + seg_h
+def _resize_and_center(
+    img: np.ndarray, target: int = 1024
+) -> Tuple[np.ndarray, Tuple[int, int], Tuple[int, int]]:
+    h, w = img.shape[:2]
+    if h >= w:
+        new_h, new_w = target, int(w * target / h)
+        resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+        top, left = 0, (target - new_w) // 2
     else:
-        y0 = y1 - seg_h
+        new_h, new_w = int(h * target / w), target
+        resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+        top, left = (target - new_h) // 2, 0
 
-    crop      = padded[y0:y1].copy()
-    crop_mask = mask[y0:y1].copy()
-
-    crop_out  = inpaint_image(
-        crop, crop_mask, prompt,
-        dilate_px=dilate_px,
-        guidance_scale=guidance,
-        steps=steps
-    )
-
-    padded[y0:y1] = crop_out      # same shape now → no broadcast error
-    return padded
-
-
+    canvas = np.zeros((target, target, 3), dtype=np.uint8)
+    canvas[top: top + new_h, left: left + new_w] = resized
+    return canvas, (top, left), (new_h, new_w)
 
 
 def complete_to_1024(
     image_arr: np.ndarray,
     prompts_path: str,
-    dilate_px: int, 
-    guidance_scale: float, 
-    steps: int
+    dilate_px: int,
+    guidance_scale: float,
+    steps: int,
 ) -> np.ndarray:
+    # 1) centre on a 1024×1024 canvas
+    canvas, (top, left), (new_h, new_w) = _resize_and_center(image_arr, 1024)
+    if new_h == 1024 and new_w == 1024:
+        return canvas                         # nothing to fill
 
-    with open(prompts_path, 'r') as f:
-        prompts = json.load(f)
-    side_prompt   = prompts['atmosphere']
-    sky_prompt    = prompts['sky_or_ceiling']
-    bottom_prompt = prompts['ground_or_floor']
+    # 2) read prompts --------------------------------------------------------
+    try:
+        prompt_dict = json.loads(Path(prompts_path).read_text(encoding="utf-8"))
+        if not isinstance(prompt_dict, dict):
+            raise ValueError
+    except Exception:
+        txt = Path(prompts_path).read_text(encoding="utf-8").strip()
+        prompt_dict = {"atmosphere": txt,
+                       "sky_or_ceiling": txt,
+                       "ground_or_floor": txt}
 
-    # --- Stage 0: scale so longest side == 1024, keep aspect ratio ---
-    h, w = image_arr.shape[:2]
-    scale = 1024.0 / max(h, w)
-    if abs(scale - 1.0) > 1e-3:
-        new_w = int(round(w * scale))
-        new_h = int(round(h * scale))
-        interp = cv2.INTER_CUBIC if scale > 1 else cv2.INTER_AREA
-        image_arr = cv2.resize(image_arr, (new_w, new_h), interpolation=interp)
+    # 3) build one mask that covers *all* black pixels -----------------------
+    mask = load_mask_from_black(canvas)
+    if mask.max() == 0:
+        return canvas                         # nothing to in-paint
 
-    # --- Stage 1: pad left/right if needed ---
-    h, w = image_arr.shape[:2]
-    missing_w = 1024 - w
-    if missing_w > 2:
-        left  = missing_w // 2
-        right = missing_w - left
-        padded, mask = pad_and_create_mask(
-            image_arr, left, right, 0, 0
-        )
-        image_arr = inpaint_image(padded, mask, side_prompt, dilate_px, guidance_scale, steps)
 
-    # --- Stage 2: pad top if needed ---
-    h, w = image_arr.shape[:2]
-    missing_h = 1024 - h
-    if missing_h > 2:
-        top = math.ceil(missing_h / 2)
-        padded, mask = pad_and_create_mask(image_arr, 0, 0, top, 0)
 
-        # in‑paint only the upper half we just created
-        padded = _inpaint_half(
-            padded, mask, sky_prompt,
-            which="top",
-            overlap_px=32,          # 16‑48 px of context is plenty
-            dilate_px=dilate_px,
-            guidance=guidance_scale,
-            steps=steps
-        )
-        image_arr = padded        # continue with the updated frame
+    # 4) choose a single prompt ---------------------------------------------
+    if new_w < 1024:                  # black bands are left & right
+        prompt = prompt_dict.get("atmosphere", "")
+    else:                             # black bands are top & bottom
+        prompt = (
+            (prompt_dict.get("sky_or_ceiling", "") + " ").strip() +
+            prompt_dict.get("ground_or_floor", "")
+        ).strip()
 
-    # --- Stage 3: pad bottom if needed ---
-    h, w = image_arr.shape[:2]
-    missing_h = 1024 - h
-    if missing_h > 2:
-        bottom = missing_h
-        padded, mask = pad_and_create_mask(image_arr, 0, 0, 0, bottom)
+    # 5) one-shot in-paint ---------------------------------------------------
+    canvas = inpaint_image(
+        canvas, mask, prompt,
+        dilate_px=dilate_px,
+        guidance_scale=guidance_scale,
+        steps=steps,
+    )
 
-        padded = _inpaint_half(
-            padded, mask, bottom_prompt,
-            which="bottom",
-            overlap_px=32,
-            dilate_px=dilate_px,
-            guidance=guidance_scale,
-            steps=steps
-        )
-        image_arr = padded
+    return canvas
 
-    # --- Final: center‐crop any slight overshoot ---
-    h, w = image_arr.shape[:2]
-    if h != 1024 or w != 1024:
-        y = max((h - 1024) // 2, 0)
-        x = max((w - 1024) // 2, 0)
-        image_arr = image_arr[y:y+1024, x:x+1024]
 
-    return image_arr
+
 
 
 def center_image(img, fov_deg=90, out_w=4096, out_h=2048):
-    # front view
     pano = perspective_to_equirectangular(
-        pers_img   = img,
-        yaw        = 0.0,
-        pitch      = 0.0,
-        fov        = fov_deg,
-        width  = out_w,
-        height = out_h
+        pers_img=img, yaw=0.0, pitch=0.0,
+        fov=fov_deg, width=out_w, height=out_h
     )
-
-    # 180° yaw gives the “mirrored” halves at the left and right edges
     wrap = perspective_to_equirectangular(
-        pers_img   = img,
-        yaw        = 180.0,      # look backwards
-        pitch      = 0.0,
-        fov        = fov_deg,
-        width  = out_w,
-        height = out_h
+        pers_img=img, yaw=180.0, pitch=0.0,
+        fov=fov_deg, width=out_w, height=out_h
     )
-
-    # copy any non-black pixel from the second pass into the panorama
     mask = wrap.any(axis=-1)
     pano[mask] = wrap[mask]
     return pano
-
-

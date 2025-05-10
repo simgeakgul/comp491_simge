@@ -1,28 +1,12 @@
 from transformers import pipeline, AutoImageProcessor
 from diffusers import StableDiffusionInpaintPipeline
-from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
 import torch
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def load_pipe(model_id: str):
 
-    if model_id == "llava_model":
-            
-        MODEL_ID = "llava-hf/llava-v1.6-vicuna-7b-hf"
-        dtype  = torch.float16 if device == "cuda" else torch.float32
-        model     = LlavaNextForConditionalGeneration.from_pretrained(
-            MODEL_ID, torch_dtype=dtype, low_cpu_mem_usage=True
-        ).to(device)
-
-        return model
-
-    elif model_id == "llava_processor":
-        MODEL_ID = "llava-hf/llava-v1.6-vicuna-7b-hf"
-        processor = LlavaNextProcessor.from_pretrained(MODEL_ID, use_fast=True)
-
-
-    elif model_id == "diffusion":
+    if model_id == "diffusion":
         pipe = StableDiffusionInpaintPipeline.from_pretrained(
             "stabilityai/stable-diffusion-2-inpainting",
             torch_dtype=torch.float16 if device == "cuda" else torch.float32,

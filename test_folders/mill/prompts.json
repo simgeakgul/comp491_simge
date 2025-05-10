@@ -1,7 +1,5 @@
 {
-    "atmosphere": "Continue the scene in the original style of the painting.",
-    "sky_or_ceiling": "Continue the scene in the original style of the painting.",
-    "ground_or_floor": "Continue the scene in the original style of the painting."
-  }
-  
-  
+  "atmosphere": "The painting depicts a serene landscape with a quaint village, and  trees",
+  "sky_or_ceiling": "The sky in the outdoor scene is a clear blue with a few scattered clouds.",
+  "ground_or_floor": "The ground in this outdoor scene is orange and brown dirt."
+}

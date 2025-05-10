@@ -1,13 +1,25 @@
 import os
 import cv2
+import argparse
 import numpy as np
 from utils.load_configs import load_config, PanoConfig
 from utils.super_reso import build_border_mask, save_pano_with_mask_overlay, split_pano_and_mask
 from utils.inpaint import inpaint_image
 
+def parse_args():
+    p = argparse.ArgumentParser(description="Inpaint and fix a panorama folder")
+    p.add_argument(
+        "--base",
+        required=True,
+        help="Path to folder containing pano.jpg, config.yaml, etc."
+    )
+    return p.parse_args()
+
 
 def main():
-    base = "test_folders/landscape"
+    args = parse_args()
+    base = args.base
+    
     cfg  = load_config(os.path.join(base, "config.yaml"))
 
     pano_path = os.path.join(base, "pano.jpg")

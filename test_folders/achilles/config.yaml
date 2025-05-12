@@ -1,4 +1,8 @@
 # config.yaml
+
+out_w: 4096 
+out_h: 2048
+
 pitch_map:
   atmosphere:      0.0
   sky_or_ceiling:  45.0
@@ -9,16 +13,16 @@ sky_yaws:        [0, 90, 180, 270]
 ground_yaws:     [0, 90, 180, 270]
 
 fov_map:
-  atmosphere:      75.0
-  sky_or_ceiling:  100.0
-  ground_or_floor: 100.0
+  atmosphere:      80.0
+  sky_or_ceiling:  90.0
+  ground_or_floor: 90.0
 
 guidance_scale: 7.0
 steps:          50
 dilate_pixel:   16
 
 fovdeg:         90.0
-border_px:      10
+border_px:      15
 
 crop_size:      1024       
 edge_sigma:     5.0        

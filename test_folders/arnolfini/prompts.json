@@ -1,7 +1,5 @@
 {
-    "atmosphere": "Continue the scene in the original style of the painting.",
-    "sky_or_ceiling": "Continue the scene in the original style of the painting.",
-    "ground_or_floor": "Continue the scene in the original style of the painting."
-  }
-  
-  
+  "atmosphere": "The background is a room with a window, a chandelier, and a red curtain. The overall atmosphere is one of a historical or classical setting.",
+  "sky_or_ceiling": "The ceiling is wooden.",
+  "ground_or_floor": "The floor is wooden."
+}

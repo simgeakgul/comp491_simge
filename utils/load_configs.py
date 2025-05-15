@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Dict, List
 import yaml
 
 @dataclass
@@ -8,11 +9,11 @@ class PanoConfig:
     out_w: int
     out_h: int
 
-    pitch_map:          dict[str, float]
-    horizontal_yaws:    list[int]
-    sky_yaws:           list[int]
-    ground_yaws:        list[int]
-    fov_map:            dict[str, float]
+    pitch_map:          Dict[str, float]
+    horizontal_yaws:    List[int]
+    sky_yaws:           List[int]
+    ground_yaws:        List[int]
+    fov_map:            Dict[str, float]
     guidance_scale:     float
     steps:              int
     dilate_pixel:       int

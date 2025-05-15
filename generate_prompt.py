@@ -41,29 +41,30 @@ def generate_three_prompts(img: Image.Image, prompts_path: str, in_out: str) -> 
             return text.split("ASSISTANT:", 1)[-1].strip()
         return text.strip()
 
-    sys_prompt = "Build two simple sentences with simple words."
+    sys_prompt = "Build simple sentences with simple words."
 
     prompts = {
         "atmosphere": query_llava(
             img,
+            "Describe only the background and  overall atmosphere "
+            "Do not mention center objects."
             f"{sys_prompt}"
-            "Describe the overall atmosphere "
-            " **ignoring specific objects or people**."
+            
         ),
 
         "sky_or_ceiling": query_llava(
             img,
-            f"{sys_prompt}"
             f"Describe only the {'sky' if in_out == 'outdoor' else 'ceiling'} "
             f"for this {in_out} scene. "
+            f"{sys_prompt}"
         ),
 
         "ground_or_floor": query_llava(
             img,
-            f"{sys_prompt}"
             f"Describe only the {'ground' if in_out == 'outdoor' else 'floor'} "
             f"for this {in_out} scene."
             "**ignoring specific objects or people**."
+            f"{sys_prompt}"
         )
     }
 

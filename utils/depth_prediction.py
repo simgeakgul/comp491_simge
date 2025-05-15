@@ -23,10 +23,7 @@ def build_depth_panorama(
     center_bias: float,
     align_depth: bool,
 ):
-    """
-    Generates a dense depth panorama aligned to `pano_bgr`.
-    Unseen pixels remain zero.
-    """
+
     H, W = pano_bgr.shape[:2]
 
     # load the appropriate metric depth model

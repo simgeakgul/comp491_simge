@@ -17,7 +17,7 @@ fov_map:
   sky_or_ceiling:  90.0
   ground_or_floor: 90.0
 
-guidance_scale: 3.0
+guidance_scale: 7.0
 steps:          50
 dilate_pixel:   16
 

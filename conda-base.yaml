@@ -1,0 +1,24 @@
+name: pano3dc
+channels:
+  - defaults
+dependencies:
+  - python=3.10.16
+  - pip
+  - ca-certificates
+  - libffi
+  - openssl
+  - readline
+  - sqlite
+  - tk
+  - xz
+  - zlib
+  - _libgcc_mutex
+  - _openmp_mutex
+  - bzip2
+  - ncurses
+  - libuuid
+  - ld_impl_linux-64
+  - libgcc-ng
+  - libgomp
+  - libstdcxx-ng
+  - tzdata

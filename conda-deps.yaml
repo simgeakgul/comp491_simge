@@ -1,0 +1,8 @@
+name: pano3dc
+channels:
+  - defaults
+dependencies:
+  - numpy
+  - scipy
+  - scikit-image
+  - python-multipart

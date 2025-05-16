@@ -21,7 +21,6 @@ dependencies:
   - tzdata=2025a=h04d1e81_0
   - xz=5.6.4=h5eee18b_1
   - zlib=1.2.13=h5eee18b_1
-  - python-multipart
   - pip:
     - accelerate==1.6.0
     - aiohappyeyeballs==2.6.1
@@ -106,3 +105,4 @@ dependencies:
     - zipp==3.21.0
     - uvicorn
     - fastapi
+    - python-multipart

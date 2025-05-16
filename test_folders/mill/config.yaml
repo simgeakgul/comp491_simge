@@ -18,13 +18,8 @@ fov_map:
   ground_or_floor: 90.0
 
 guidance_scale: 7.0
-<<<<<<< HEAD
 steps:          50
 dilate_pixel:   32
-=======
-steps:          1
-dilate_pixel:   16
->>>>>>> origin/main
 
 fovdeg:         90.0
 border_px:      15

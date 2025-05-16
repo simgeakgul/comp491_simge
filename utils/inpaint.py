@@ -71,8 +71,7 @@ def inpaint_image(
     mask_pil  = mask_pil.crop((0, 0, w8, h8))
 
     NEG_PROMPT = (
-    "glitch, jpeg artefacts, unrealistic shadows, border, frame, text, watermark, "
-    "cropped, deformed perspective"
+    "glitch, border, frame, text, watermark"
     )
 
     
@@ -86,7 +85,6 @@ def inpaint_image(
         width               = w8,
         guidance_scale      = guidance_scale,
         num_inference_steps = steps,
-        noise_alpha         = 0.25
     ).images[0]
 
     return cv2.cvtColor(np.array(out_pil), cv2.COLOR_RGB2BGR)

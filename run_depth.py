@@ -22,7 +22,7 @@ def main():
 
     # build yaw_lists dict from cfg
     yaw_lists = {
-        "atmosphere":      cfg.horizontal_yaws,
+        "atmosphere":      cfg.horizontal_yaws + [0, 180],
         "sky_or_ceiling":  cfg.sky_yaws,
         "ground_or_floor": cfg.ground_yaws,
     }

@@ -8,9 +8,9 @@ pitch_map:
   sky_or_ceiling:  45.0
   ground_or_floor: -45.0
 
-horizontal_yaws: [45, -45, 135, -135, 90, -90]
-sky_yaws:        [0, 90, 180, 270]
-ground_yaws:     [0, 90, 180, 270]
+horizontal_yaws: [0, 45, -45, 135, -135, 90, -90, 180]
+sky_yaws:        [90, 180, 270, 360]
+ground_yaws:     [90, 180, 270, 360]
 
 fov_map:
   atmosphere:      80.0
@@ -19,7 +19,7 @@ fov_map:
 
 guidance_scale: 7.0
 steps:          50
-dilate_pixel:   16
+dilate_pixel:   32
 
 fovdeg:         90.0
 border_px:      15

@@ -41,7 +41,7 @@ def generate_three_prompts(img: Image.Image, prompts_path: str, in_out: str) -> 
             return text.split("ASSISTANT:", 1)[-1].strip()
         return text.strip()
 
-    sys_prompt = " Build simple descriptions comma-seperated."
+    sys_prompt = " Build simple descriptions."
 
     prompts = {
         "atmosphere": query_llava(

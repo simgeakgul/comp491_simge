@@ -21,6 +21,7 @@ dependencies:
   - tzdata=2025a=h04d1e81_0
   - xz=5.6.4=h5eee18b_1
   - zlib=1.2.13=h5eee18b_1
+  - python-multipart
   - pip:
     - accelerate==1.6.0
     - aiohappyeyeballs==2.6.1
@@ -88,7 +89,7 @@ dependencies:
     - spandrel==0.4.1
     - sympy==1.13.1
     - tifffile==2025.3.30
-    - timm==1.0.15
+    - timm<=0.6.7
     - tokenizers==0.21.1
     - torch==2.6.0
     - torchaudio==2.6.0
@@ -103,4 +104,5 @@ dependencies:
     - wheel==0.45.1
     - yarl==1.20.0
     - zipp==3.21.0
-prefix: /kuacc/users/simgeakgul20/.conda/envs/pano3dc
+    - uvicorn
+    - fastapi

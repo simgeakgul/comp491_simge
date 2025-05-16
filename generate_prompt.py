@@ -12,8 +12,8 @@ MODEL_ID = "llava-hf/llava-v1.6-vicuna-7b-hf"
 dtype  = torch.float16 if device == "cuda" else torch.float32
 
 model     = LlavaNextForConditionalGeneration.from_pretrained(
-    MODEL_ID, torch_dtype=dtype, low_cpu_mem_usage=True
-).to(device)
+    MODEL_ID, torch_dtype=dtype, low_cpu_mem_usage=True,device_map="auto"
+)
 
 processor = LlavaNextProcessor.from_pretrained(MODEL_ID, use_fast=True)
 

@@ -5,23 +5,23 @@ out_h: 2048
 
 pitch_map:
   atmosphere:      0.0
-  sky_or_ceiling:  50.0
-  ground_or_floor: -50.0
+  sky_or_ceiling:  60.0 # higher values for indoor, lower for more space of movement.
+  ground_or_floor: -60.0
 
-horizontal_yaws: [45, -45, 135, -135, 90, -90]
+horizontal_yaws: [30, -30, 150, -150, 60, -60, 120, -120]
 sky_yaws:        [0, 90, 180, 270]
 ground_yaws:     [0, 90, 180, 270]
 
 fov_map:
-  atmosphere:      80.0
-  sky_or_ceiling:  85.0
-  ground_or_floor: 85.0
+  atmosphere:      85.0
+  sky_or_ceiling:  90.0
+  ground_or_floor: 90.0
 
-guidance_scale: 6.0
-steps:          50
+guidance_scale: 5.0 # don't drop below 4.
+steps:          50 # don't drop below 40
 dilate_pixel:   16
 
-fovdeg:         90.0
+fovdeg:         85.0
 border_px:      15
 
 crop_size:      1024       

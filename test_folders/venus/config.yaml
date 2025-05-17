@@ -5,8 +5,8 @@ out_h: 2048
 
 pitch_map:
   atmosphere:      0.0
-  sky_or_ceiling:  45.0
-  ground_or_floor: -45.0
+  sky_or_ceiling:  50.0
+  ground_or_floor: -50.0
 
 horizontal_yaws: [45, -45, 135, -135, 90, -90]
 sky_yaws:        [0, 90, 180, 270]

@@ -4,72 +4,86 @@ import argparse
 import json
 from PIL import Image
 from utils.load_configs import load_config, PanoConfig
-from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
+from transformers import Qwen2_5_VLForConditionalGeneration, AutoTokenizer, AutoProcessor
+from qwen_vl_utils import process_vision_info
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-      
-MODEL_ID = "llava-hf/llava-v1.6-vicuna-7b-hf"
-dtype  = torch.float16 if device == "cuda" else torch.float32
+MODEL_ID = "Qwen/Qwen2.5-VL-7B-Instruct"
 
-model     = LlavaNextForConditionalGeneration.from_pretrained(
-    MODEL_ID, torch_dtype=dtype, low_cpu_mem_usage=True,device_map="auto"
+model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    MODEL_ID, torch_dtype="auto", device_map="auto"
 )
 
-processor = LlavaNextProcessor.from_pretrained(MODEL_ID, use_fast=True)
+processor = AutoProcessor.from_pretrained(MODEL_ID, use_fast=True)
 
-def query_llava(img: Image.Image, question: str, max_new_tokens: int = 32) -> str: 
+def build_message(image, prompt):
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a vision-language assistant that builds concise, comma-separated scene descriptions. Important rule: ignore center objects and people." 
+        },
 
-    conversation = [{
-        "role": "user",
-        "content": [
-            {"type": "text",  "text": question},
-            {"type": "image"}
-        ]
-    }]
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "image": image,
+                },
+                {
+                    "type": "text", 
+                    "text": prompt
+                },
+            ],
+        }
+    ]
+    return messages
 
-    chat   = processor.apply_chat_template(conversation, add_generation_prompt=True)
-    inputs = processor(images=img, text=chat, return_tensors="pt").to(device, dtype)
-    out    = model.generate(**inputs, max_new_tokens=max_new_tokens)
 
-    return processor.decode(out[0], skip_special_tokens=True).strip()
+def query_qwen(image, prompt):
+    messages = build_message(image, prompt)
 
+    text = processor.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True)
 
-def generate_three_prompts(img: Image.Image, prompts_path: str, in_out: str) -> dict:
+    image_inputs, video_inputs = process_vision_info(messages)
 
-    def clean_response(text: str) -> str:
-        if "ASSISTANT:" in text:
-            return text.split("ASSISTANT:", 1)[-1].strip()
-        return text.strip()
+    inputs = processor(
+        text=[text],
+        images=image_inputs,
+        videos=video_inputs,
+        padding=True,
+        return_tensors="pt",
+    )
+    inputs = inputs.to("cuda")
+    generated_ids = model.generate(**inputs, max_new_tokens=128)
+    generated_ids_trimmed = [
+        out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+    ]
+    output_text = processor.batch_decode(
+        generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+    )
+    return output_text[0].strip() 
 
-    sys_prompt = " Build simple descriptions."
-
+def generate_three_prompts(img, prompts_path, in_out):
     prompts = {
-        "atmosphere": query_llava(
+        "atmosphere": query_qwen(
             img,
-            f"Describe the overall scene and style, ignore specific objects and people."
-            f"{sys_prompt}"
-            
+            f"Describe the overall {'background scene' if in_out == 'indoor' else 'landscape'}  and style" 
         ),
 
-        "sky_or_ceiling": query_llava(
+        "sky_or_ceiling": query_qwen(
             img,
-            f"Describe only the {'sky' if in_out == 'outdoor' else 'ceiling'} "
-            f"{sys_prompt}"
+            f"Describe only the {'sky' if in_out == 'outdoor' else 'ceiling'} " 
         ),
 
-        "ground_or_floor": query_llava(
+        "ground_or_floor": query_qwen(
             img,
             f"Describe only the {'ground' if in_out == 'outdoor' else 'floor'} "
-            f"{sys_prompt}"
         )
     }
 
-    prompts_clean = {k: clean_response(v) for k, v in prompts.items()}
-
     with open(prompts_path, "w", encoding="utf-8") as f:
-        json.dump(prompts_clean, f, indent=2, ensure_ascii=False)
-
-    return prompts_clean
+        json.dump(prompts, f, indent=2, ensure_ascii=False)
 
 
 def parse_args():

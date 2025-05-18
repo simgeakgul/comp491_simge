@@ -85,6 +85,14 @@ def generate_three_prompts(img, prompts_path, in_out):
     with open(prompts_path, "w", encoding="utf-8") as f:
         json.dump(prompts, f, indent=2, ensure_ascii=False)
 
+def generate_caption(image_path):
+
+    img = Image.open(image_path).convert("RGB")
+    caption = query_qwen(
+            img,
+            "What would be the backgorund music for this? Start with 'The sound of...'." )
+    return caption
+
 
 def parse_args():
     p = argparse.ArgumentParser(description="Generate prompts for a given folder")

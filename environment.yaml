@@ -106,3 +106,4 @@ dependencies:
     - uvicorn
     - fastapi
     - python-multipart
+    - qwen_vl_utils

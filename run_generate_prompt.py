@@ -31,7 +31,7 @@ def main():
             print(f"✖ {script} failed (exit {e.returncode})")
             sys.exit(e.returncode)
 
-    print("✔ All done.")
+    print("Prompt generation completed successfully.")
 
 if __name__ == "__main__":
     main()

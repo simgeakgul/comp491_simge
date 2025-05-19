@@ -127,6 +127,7 @@ def run_others_pipeline(job_path: str):
 
         fixed_pano = os.path.join(job_path, "fixed_pano.jpg")
         depth_pano = os.path.join(job_path, "depth_pano.jpg")
+        soundscape = os.path.join(job_path, "soundscape.wav")
         if not (os.path.exists(fixed_pano) and os.path.exists(depth_pano)):
             raise Exception("Missing output images")
 
@@ -134,6 +135,7 @@ def run_others_pipeline(job_path: str):
         with zipfile.ZipFile(zip_path, "w") as zipf:
             zipf.write(fixed_pano, arcname="fixed_pano.jpg")
             zipf.write(depth_pano, arcname="depth_pano.jpg")
+            zipf.write(soundscape, arcname="soundscape.wav")
 
         with open(os.path.join(job_path, "status.txt"), "w") as f:
             f.write("done")

@@ -19,6 +19,7 @@ def main():
         "run_pano.py",
         "run_fixes.py",
         "run_depth.py",
+        "generate_sound.py"
     ]
 
     for script in scripts:

@@ -62,8 +62,7 @@ def get_files(folder_path: str) -> tuple[str,str,str]:
         os.path.join(folder_path, "input.jpg"),
         os.path.join(folder_path, "prompts.json"),
         os.path.join(folder_path, "pano.jpg"),
-        os.path.join(folder_path, "config.yaml")
-
+        os.path.join(folder_path, "config.json")
     )
 
 def parse_args():

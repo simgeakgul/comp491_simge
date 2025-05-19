@@ -118,6 +118,45 @@ def get_results(job_id: str):
         raise HTTPException(status_code=404, detail="Results not ready")
     return FileResponse(zip_path, media_type="application/zip", filename="results.zip")
 
+# 1) Fixed panorama
+@app.get("/pano/{job_id}")
+def get_pano(job_id: str):
+    job_path = os.path.join(JOBS_DIR, job_id)
+    fixed_pano = os.path.join(job_path, "fixed_pano.jpg")
+    if not os.path.exists(fixed_pano):
+        raise HTTPException(status_code=404, detail="Fixed panorama not ready")
+    return FileResponse(
+        fixed_pano,
+        media_type="image/jpeg",
+        filename="fixed_pano.jpg"
+    )
+
+# 2) Depth panorama
+@app.get("/depth/{job_id}")
+def get_depth(job_id: str):
+    job_path = os.path.join(JOBS_DIR, job_id)
+    depth_pano = os.path.join(job_path, "depth_pano.jpg")
+    if not os.path.exists(depth_pano):
+        raise HTTPException(status_code=404, detail="Depth panorama not ready")
+    return FileResponse(
+        depth_pano,
+        media_type="image/jpeg",
+        filename="depth_pano.jpg"
+    )
+
+# 3) Soundscape
+@app.get("/soundscape/{job_id}")
+def get_soundscape(job_id: str):
+    job_path = os.path.join(JOBS_DIR, job_id)
+    soundscape = os.path.join(job_path, "soundscape.wav")
+    if not os.path.exists(soundscape):
+        raise HTTPException(status_code=404, detail="Soundscape not ready")
+    return FileResponse(
+        soundscape,
+        media_type="audio/wav",
+        filename="soundscape.wav"
+    )
+
 
 # 🔁 Pipeline Step 2 (run_others.py)
 def run_others_pipeline(job_path: str):

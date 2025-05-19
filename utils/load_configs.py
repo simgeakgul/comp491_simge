@@ -1,7 +1,7 @@
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List
-import yaml
 
 @dataclass
 class PanoConfig:
@@ -26,8 +26,8 @@ class PanoConfig:
     align_depth:        bool
     in_out:             str
 
-def load_config(path: str | Path = "config.yaml") -> PanoConfig:
-    data = yaml.safe_load(Path(path).read_text())
+def load_config(path: str | Path = "config.json") -> PanoConfig:
+    data = json.loads(Path(path).read_text())
     return PanoConfig(
 
         out_w          = data["out_w"],

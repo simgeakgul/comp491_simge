@@ -3,7 +3,7 @@ import json
 import argparse
 import os
 from utils.center_img import center_image, complete_to_square
-from utils.one_cycle import one_cycle
+from utils.one_cycle import one_cycle, save_image
 from utils.load_configs import load_config, PanoConfig
 
 def generate_full_pano(
@@ -26,6 +26,7 @@ def generate_full_pano(
 
     # 2) center the front view
     pano = center_image(resized, cfg.fovdeg, cfg.out_w, cfg.out_h)
+    save_image("00_init.jpg", pano)
 
     # 3) load prompts
     with open(prompts_path, "r") as f:

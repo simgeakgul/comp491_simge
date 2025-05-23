@@ -20,7 +20,7 @@ def main():
     args = parse_args()
     base = args.base
     
-    cfg  = load_config(os.path.join(base, "config.yaml"))
+    cfg  = load_config(os.path.join(base, "config.json"))
 
     pano_path = os.path.join(base, "pano.jpg")
     pano      = cv2.imread(pano_path)

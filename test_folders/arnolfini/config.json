@@ -23,6 +23,6 @@
     "edge_sigma": 3.0,
     "center_bias": 1.0,
     "align_depth": false,
-    "in_out": "outdoor"
+    "in_out": "indoor"
   }
   

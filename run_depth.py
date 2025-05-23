@@ -18,7 +18,7 @@ def main():
     args = parse_args()
     base = args.base
     
-    cfg  = load_config(os.path.join(base, "config.yaml"))
+    cfg  = load_config(os.path.join(base, "config.json"))
 
     # build yaw_lists dict from cfg
     yaw_lists = {

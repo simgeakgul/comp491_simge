@@ -111,7 +111,7 @@ def main():
 
     image_path   = os.path.join(base, "input.jpg")
     prompts_path = os.path.join(base, "prompts.json")
-    conf_path    = os.path.join(base, "config.yaml")
+    conf_path    = os.path.join(base, "config.json")
 
     cfg     = load_config(conf_path)
     in_out  = cfg.in_out

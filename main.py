@@ -1,3 +1,4 @@
+import base64
 from fastapi import FastAPI, BackgroundTasks, File, UploadFile, HTTPException, Form
 from fastapi.responses import FileResponse
 import os
@@ -18,8 +19,50 @@ os.makedirs(JOBS_DIR, exist_ok=True)
 async def generate_prompt(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    config: UploadFile = File(...)
+    fovdeg: float = Form(...),
+    fovmap_atmosphere: float = Form(...),
+    fovmap_sky_or_ceiling: float = Form(...),
+    fovmap_ground_or_floor: float = Form(...),
+    in_out: str = Form(...),
+    guidance_scale: float = Form(...),
 ):
+    config =\
+    {
+        "out_w": 4096,
+        "out_h": 2048,
+        "pitch_map": {
+          "atmosphere": 0.0,
+          "sky_or_ceiling": 45.0,
+          "ground_or_floor": -45.0
+        },
+        "horizontal_yaws": [45, -45, 135, -135, 90, -90],
+        "sky_yaws": [0, 90, 180, 270],
+        "ground_yaws": [0, 90, 180, 270],
+        "fov_map": {
+          "atmosphere": 80.0,
+          "sky_or_ceiling": 100.0,
+          "ground_or_floor": 100.0
+        },
+        "guidance_scale": 7.0,
+        "steps": 50,
+        "dilate_pixel": 16,
+        "fovdeg": 95.0,
+        "border_px": 15,
+        "crop_size": 1024,
+        "edge_sigma": 3.0,
+        "center_bias": 1.0,
+        "align_depth": False,
+        "in_out": "outdoor"
+    }
+
+    # Update config with form data
+    config["fovdeg"] = fovdeg
+    config["fov_map"]["atmosphere"] = fovmap_atmosphere
+    config["fov_map"]["sky_or_ceiling"] = fovmap_sky_or_ceiling
+    config["fov_map"]["ground_or_floor"] = fovmap_ground_or_floor
+    config["in_out"] = in_out
+    config["guidance_scale"] = guidance_scale
+
     # Create job directory
     job_id = str(uuid.uuid4())
     job_path = os.path.join(JOBS_DIR, job_id)
@@ -30,13 +73,16 @@ async def generate_prompt(
     with open(input_image_path, "wb") as f:
         f.write(await file.read())
 
-    config_path = os.path.join(job_path, "config.yaml")
-    with open(config_path, "wb") as f:
-        f.write(await config.read())
+    config_path = os.path.join(job_path, "config.json")
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=2)
 
     # Initialize prompt status
     with open(os.path.join(job_path, "prompt_status.txt"), "w") as f:
         f.write("processing")
+
+    with open(os.path.join(job_path, "status.txt"), "w") as f:
+        f.write("generating prompts")
 
     # Run in background
     background_tasks.add_task(run_prompt_generation_pipeline, job_path)
@@ -74,21 +120,24 @@ def get_prompt_status(job_id: str):
 async def run_with_prompts(
     background_tasks: BackgroundTasks,
     job_id: str = Form(...),
-    edited_prompts: UploadFile = File(...)
+    atmosphere_prompt: str = Form(...),
+    sky_or_ceiling_prompt: str = Form(...),
+    ground_or_floor_prompt: str = Form(...),
 ):
     job_path = os.path.join(JOBS_DIR, job_id)
     if not os.path.exists(job_path):
         raise HTTPException(status_code=404, detail="Invalid job_id")
 
     # Save edited prompts as JSON
+    prompts = {
+        "atmosphere": atmosphere_prompt,
+        "sky_or_ceiling": sky_or_ceiling_prompt,
+        "ground_or_floor": ground_or_floor_prompt
+    }
+
     edited_prompts_path = os.path.join(job_path, "prompts.json")
-    try:
-        contents = await edited_prompts.read()
-        parsed_json = json.loads(contents)  # ✅ Validate it's proper JSON
-        with open(edited_prompts_path, "w") as f:
-            json.dump(parsed_json, f, indent=2)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON format in edited_prompts")
+    with open(edited_prompts_path, "w") as f:
+        json.dump(prompts, f, indent=2)
 
     # Update status
     with open(os.path.join(job_path, "status.txt"), "w") as f:
@@ -156,6 +205,29 @@ def get_soundscape(job_id: str):
         media_type="audio/wav",
         filename="soundscape.wav"
     )
+
+@app.get("/all_meta")
+def get_all_meta():
+    result = {}
+    for job_id in os.listdir(JOBS_DIR):
+        job_path = os.path.join(JOBS_DIR, job_id)
+        if not os.path.isdir(job_path):
+            continue
+
+        status_file = os.path.join(job_path, "status.txt")
+        if os.path.exists(status_file):
+            with open(status_file) as f:
+                status = f.read().strip()
+        else:
+            status = "unknown"
+
+        result[job_id] = status
+
+    if not result:
+        raise HTTPException(status_code=404, detail="No jobs found")
+
+    return result
+
 
 
 # 🔁 Pipeline Step 2 (run_others.py)

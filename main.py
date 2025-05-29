@@ -1,4 +1,3 @@
-import base64
 from fastapi import FastAPI, BackgroundTasks, File, UploadFile, HTTPException, Form
 from fastapi.responses import FileResponse
 import os
@@ -8,8 +7,17 @@ import sys
 import run_generate_prompt
 import run_others
 import json
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 JOBS_DIR = "jobs"
 os.makedirs(JOBS_DIR, exist_ok=True)
@@ -25,7 +33,12 @@ async def generate_prompt(
     fovmap_ground_or_floor: float = Form(...),
     in_out: str = Form(...),
     guidance_scale: float = Form(...),
+    key: str = Form(...),
+    name: str = Form(...)
 ):
+    if key != "living-paintings":
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
     config =\
     {
         "out_w": 4096,
@@ -52,7 +65,8 @@ async def generate_prompt(
         "edge_sigma": 3.0,
         "center_bias": 1.0,
         "align_depth": False,
-        "in_out": "outdoor"
+        "in_out": "outdoor",
+        "name": name
     }
 
     # Update config with form data
@@ -69,7 +83,7 @@ async def generate_prompt(
     os.makedirs(job_path, exist_ok=True)
 
     # Save input files
-    input_image_path = os.path.join(job_path, file.filename)
+    input_image_path = os.path.join(job_path, "input.jpg")
     with open(input_image_path, "wb") as f:
         f.write(await file.read())
 
@@ -215,13 +229,21 @@ def get_all_meta():
             continue
 
         status_file = os.path.join(job_path, "status.txt")
+        config_file = os.path.join(job_path, "config.json")
         if os.path.exists(status_file):
             with open(status_file) as f:
                 status = f.read().strip()
         else:
             status = "unknown"
 
-        result[job_id] = status
+        result[job_id] = {}
+        result[job_id]["status"] = status
+        if os.path.exists(config_file):
+            with open(config_file) as f:
+                config = json.load(f)
+            result[job_id]["environment"] = config["in_out"]
+            result[job_id]["name"] = config["name"]
+
 
     if not result:
         raise HTTPException(status_code=404, detail="No jobs found")
@@ -269,7 +291,7 @@ def run_prompt_generation_pipeline(job_path: str):
             f.write("done")
 
         with open(os.path.join(job_path, "status.txt"), "w") as f:
-            f.write("awaiting_prompt_edit")
+            f.write("waiting prompts")
 
     except Exception as e:
         with open(os.path.join(job_path, "prompt_status.txt"), "w") as f:
